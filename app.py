@@ -40,55 +40,58 @@ def render_panel_riesgos():
             st.markdown("</div>", unsafe_allow_html=True)
 
 def pantalla_busqueda():
-    # Usamos un contenedor para organizar mejor el buscador
     st.markdown('<div class="card" style="text-align: center;">', unsafe_allow_html=True)
     st.title("🏦 Buscador de Clientes")
     
-    # 1. Carga del archivo
+    # 1. Carga optimizada: solo pedimos DOCPEN y CLIENTE para evitar desbordamiento en móvil
     archivo = st.file_uploader("Cargar Base Excel (MUESTRA_FINAL)", type=["xlsx"])
     
     if archivo is not None:
         try:
-            # Forzamos lectura con openpyxl
-            df = pd.read_excel(archivo, sheet_name="MUESTRA_FINAL", header=0, engine="openpyxl")
-            df.columns = [str(c).strip().upper() for c in df.columns]
+            # usecols reduce drásticamente el consumo de RAM
+            df = pd.read_excel(archivo, sheet_name="MUESTRA_FINAL", usecols=["DOCPEN", "CLIENTE"], engine="openpyxl")
             
-            # Guardamos el df en session_state para que no se pierda
+            # Limpieza inmediata de tipos de datos para prevenir errores de filtrado
+            df = df.astype(str)
+            df.columns = [c.upper().strip() for c in df.columns]
+            
             st.session_state.df = df
-            st.success("Base cargada correctamente")
+            st.success("Base cargada correctamente.")
         except Exception as e:
-            st.error(f"Error al cargar: {e}")
+            st.error(f"Error al procesar el Excel: {e}")
+            st.info("Asegúrate de que el archivo tenga la hoja 'MUESTRA_FINAL' y las columnas 'DOCPEN' y 'CLIENTE'.")
 
-    # 2. Buscador: Solo aparece si ya cargamos datos
+    # 2. Buscador con filtro protegido
     if st.session_state.df is not None:
-        st.write("---")
-        busqueda = st.text_input("Ingresa el DNI o Nombre para buscar:")
+        busqueda = st.text_input("Ingresa DNI o Nombre para buscar:")
         
         if busqueda:
-            df = st.session_state.df
-            # Filtro robusto
-            res = df[
-                df["DOCPEN"].astype(str).str.contains(busqueda, na=False) | 
-                df["CLIENTE"].astype(str).str.contains(busqueda, case=False, na=False)
-            ]
+            # Creamos una copia local para no afectar el estado global durante el filtrado
+            df_busqueda = st.session_state.df.copy()
             
-            if not res.empty:
-                st.write(f"Resultados encontrados: {len(res)}")
-                # Mostramos una tabla breve de los resultados encontrados
-                st.dataframe(res[["DOCPEN", "CLIENTE"]], use_container_width=True)
+            # Filtro booleano aplicado a cadenas de texto
+            mask = df_busqueda["DOCPEN"].str.contains(busqueda, na=False) | \
+                   df_busqueda["CLIENTE"].str.contains(busqueda, case=False, na=False)
+            
+            resultados = df_busqueda[mask]
+            
+            if not resultados.empty:
+                st.write(f"Resultados encontrados: {len(resultados)}")
                 
-                if st.button("Abrir Ficha del Cliente"):
-                    # Seleccionamos la primera coincidencia
-                    st.session_state.cliente_actual = res.iloc[0].to_dict()
-                    st.session_state.view = "ficha"
-                    st.rerun()
+                # Mostrar solo una vista previa para no saturar la pantalla móvil
+                for idx, fila in resultados.head(5).iterrows():
+                    st.write(f"---")
+                    st.write(f"**Nombre:** {fila['CLIENTE']}")
+                    st.write(f"**DNI:** {fila['DOCPEN']}")
+                    
+                    if st.button(f"Abrir Ficha: {fila['DOCPEN']}", key=f"btn_{fila['DOCPEN']}"):
+                        st.session_state.cliente_actual = fila.to_dict()
+                        st.session_state.view = "ficha"
+                        st.rerun()
             else:
-                st.warning("No se encontraron coincidencias para esa búsqueda.")
-    else:
-        st.info("Por favor, carga el archivo Excel para habilitar la búsqueda.")
-        
+                st.warning("No se encontraron coincidencias.")
+    
     st.markdown('</div>', unsafe_allow_html=True)
-
 def pantalla_ficha():
     c = st.session_state.cliente_actual
     
