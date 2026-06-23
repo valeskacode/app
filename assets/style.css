@@ -20,3 +20,20 @@ div.stButton > button {
     font-weight: 700 !important; 
     border: none !important; 
 }
+
+/* Aumentar tamaño de click para móvil */
+.stCheckbox { 
+    padding: 12px 0 !important; 
+    font-size: 16px !important; 
+}
+
+/* Estilo para las categorías jerárquicas */
+.stExpander {
+    margin-bottom: 15px !important;
+    border-radius: 12px !important;
+}
+
+/* Padding especial para evitar errores táctiles */
+div[data-testid="stExpander"] label {
+    padding-left: 20px !important;
+}
