@@ -144,6 +144,3 @@ if st.session_state.view == "busqueda":
 else: 
     pantalla_ficha()
 
-# --- ROUTER ---
-if st.session_state.view == "busqueda": pantalla_busqueda()
-else: pantalla_ficha()
