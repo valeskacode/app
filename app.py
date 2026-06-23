@@ -15,11 +15,14 @@ if "df" not in st.session_state: st.session_state.df = None
 
 def render_panel_riesgos():
     """Panel jerárquico para evaluación de campo"""
-    st.subheader("📋 Panel de Evaluación de Riesgos")
+    st.subheader("Criterio para visita a clientes")
     
     categorias = {
-        "Indicio de dolo o fraude": ["Diferencia de actividad económica", "Negocio inexistente", "Domicilio no hallado"],
-        "Evaluaciones deficientes": ["Falta de sustento documentario", "Sobreendeudamiento detectado", "Ingresos no bancarizados"]
+        "Indicio de dolo o fraude en la evaluación de céditos": ["Documentos con enmendaduras", "Documentos con datos inconsistentes", "Documentos sin datos del cliente","Documentos sin firmas o que no coinciden","Documentos duplicados en más de un cliente"],
+        "Evaluaciones deficientes o con sustento insuficiente": ["No se evidencio sustento de actividad económica", "No se evidencio sustento de ingresos", "No se evidenció sustento de activos representativos","Se omitió al cónyugue"]
+        "Créditos reprogramados y refinanciados":["Reprogramado","Refinanciado"]
+        "Clientes con créditos con calificación diferente a normal a la fecha de revisión":["Indicar la calificación a la fecha de revisión"]
+    
     }
     
     for cat, items in categorias.items():
