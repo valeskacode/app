@@ -44,33 +44,28 @@ def pantalla_busqueda():
     st.title("🏦 Buscador de Clientes")
     archivo = st.file_uploader("Cargar Base Excel (MUESTRA_FINAL)", type=["xlsx"])
     
-    if archivo:
+    if archivo is not None:
         try:
-            df = pd.read_excel(archivo, sheet_name="MUESTRA_FINAL", header=0, dtype=str)
+            # 1. Usamos una lectura más flexible
+            # Agregamos 'engine="openpyxl"' explícitamente para móviles
+            df = pd.read_excel(archivo, sheet_name="MUESTRA_FINAL", header=0, engine="openpyxl")
+            
+            # 2. Convertimos columnas a string y limpiamos espacios/mayúsculas
             df.columns = [str(c).strip().upper() for c in df.columns]
+            
+            # 3. Debug: Si falla, mostraremos qué columnas ve el móvil
             if "DOCPEN" in df.columns and "CLIENTE" in df.columns:
                 st.session_state.df = df
-                st.success("Base cargada correctamente")
+                st.success("Base cargada exitosamente")
             else:
-                st.error("Error: Columnas DOCPEN o CLIENTE no encontradas.")
+                st.error("Error: Columnas no encontradas.")
+                st.write("Columnas detectadas en el móvil:", list(df.columns))
+                st.info("Asegúrate de que la pestaña se llame 'MUESTRA_FINAL' y la primera fila tenga los títulos.")
+                
         except Exception as e:
-            st.error(f"Error al leer: {e}")
-
-    if st.session_state.df is not None:
-        busqueda = st.text_input("Buscar por DNI o Nombre")
-        if busqueda:
-            res = st.session_state.df[
-                st.session_state.df["DOCPEN"].str.contains(busqueda, na=False) | 
-                st.session_state.df["CLIENTE"].str.contains(busqueda, case=False, na=False)
-            ]
-            if not res.empty:
-                if st.button("Abrir Ficha"):
-                    st.session_state.cliente_actual = res.iloc[0].to_dict()
-                    st.session_state.view = "ficha"
-                    st.rerun()
-            else:
-                st.warning("No se encontraron coincidencias.")
-    st.markdown('</div>', unsafe_allow_html=True)
+            st.error(f"Error técnico en móvil: {e}")
+            
+    # ... resto de la lógica de búsqueda ...
 
 def pantalla_ficha():
     c = st.session_state.cliente_actual
