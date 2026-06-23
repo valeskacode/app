@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Formulario de verificación de datos visita - Optimizado para Vista Móvil
-Se fuerza un layout responsivo tipo App Móvil/Smartphone y mantiene la lógica original de 'MUESTRA_FINAL'.
+Formulario de verificación de datos visita - Rediseño Premium Mobile-First
+Basado exactamente en las maquetas visuales del sistema de evaluación.
 """
 
 import io
@@ -21,12 +21,12 @@ except Exception:
     GEO_OK = False
 
 # --------------------------------------------------------------------------
-# CONFIGURACIÓN GENERAL (Forzar contenedor móvil por CSS)
+# CONFIGURACIÓN GENERAL Y ESTILOS (UI MÓVIL PREMIUM)
 # --------------------------------------------------------------------------
 st.set_page_config(
-    page_title="App Visitas",
+    page_title="Evaluación de Crédito",
     page_icon="🏦",
-    layout="centered",  # Centrado ayuda a emular una interfaz móvil en pantallas grandes
+    layout="centered",  # Forzar contenedor angosto ideal para móviles/emulación
     initial_sidebar_state="collapsed",
 )
 
@@ -47,122 +47,131 @@ EXCEL_COLUMNS = [
     "ESTRATO", "TIPO_EXPEDIENTE",
 ]
 
-NARANJA = "C8102E"   
-AZUL = "1B3A5C"
-VERDE = "137333"
-ROJO = "a50e0e"
+# Paleta de Colores de las Maquetas Adjuntas
+ROJO_INST = "D31118"
+AZUL_TEXTO = "0F172A"
+GRIS_BG = "F8FAFC"
+VERDE_EXITO = "16A34A"
 
-# CSS Avanzado para forzar comportamiento de Smartphone App (Ancho máximo, padding y fuentes)
-MOBILE_CSS = f"""
+PREMIUM_CSS = f"""
 <style>
-/* Forzar contenedor central simulando tamaño de dispositivo móvil */
+/* Contenedor Base Móvil */
 .block-container {{
-    max-width: 480px !important;
+    max-width: 460px !important;
     padding-top: 1rem !important;
-    padding-bottom: 5rem !important;
-    padding-left: 12px !important;
-    padding-right: 12px !important;
+    padding-bottom: 6rem !important;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
 }}
 
-.stApp {{ background-color: #F8F9FA; }}
+.stApp {{ background-color: {GRIS_BG}; }}
 
-/* Tarjetas/Cards Móviles */
-.mockup-card {{
-    background: white; 
-    padding: 1.1rem; 
-    border-radius: 14px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+/* Quitar elementos por defecto de Streamlit innecesarios en App */
+#MainMenu, header, footer {{ visibility: hidden; }}
+
+/* Tarjetas Estilo iOS / Android Moderno */
+.app-card {{
+    background: #FFFFFF;
+    padding: 1.2rem;
+    border-radius: 16px;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
     margin-bottom: 1rem;
-    border: 1px solid #E9ECEF;
 }}
 
-/* Encabezado fijo de perfil de usuario en la app */
-.client-profile-box {{
-    background-color: #E6F4EA; 
-    border-radius: 12px; 
-    padding: 0.8rem 1rem;
-    margin-bottom: 1rem; 
-    border: 1px solid #D1E7DD;
-    font-size: 0.9rem;
+/* Perfil Destacado del Cliente */
+.profile-banner {{
+    background: #F0FDF4;
+    border: 1px solid #DCFCE7;
+    border-radius: 16px;
+    padding: 1.2rem;
+    margin-bottom: 1.2rem;
 }}
 
-/* Botones Grandes estilo Mobile-First (Fácil de presionar con el pulgar) */
+/* Indicadores de Estado Rápidos */
+.status-pill {{
+    background: #E2E8F0;
+    color: #475569;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: inline-block;
+}}
+.status-pill-active {{ background: #DCFCE7; color: #15803D; }}
+.status-pill-risk {{ background: #FEE2E2; color: #991B1B; }}
+
+/* Botón Principal de Acción (Grande, Táctil e Inferior) */
 div.stButton > button {{
-    background-color: #0052CC; 
-    color: white; 
-    border: none;
-    border-radius: 10px; 
-    padding: 12px 20px; 
-    font-weight: 600; 
-    font-size: 1rem;
+    background-color: {ROJO_INST} !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 14px 20px !important;
+    font-weight: 600 !important;
+    font-size: 1rem !important;
     width: 100% !important;
-    display: block;
-    margin-bottom: 0.5rem;
+    box-shadow: 0 4px 12px rgba(211, 17, 24, 0.2) !important;
+    transition: all 0.2s ease;
 }}
-div.stButton > button:hover {{ background-color: #0043A4; color: white; }}
+div.stButton > button:hover {{ transform: translateY(-1px); }}
 
-/* Estilo para botón de regreso */
-div.stButton > button[key^="btn_atras"] {{
-    background-color: #FFFFFF !important; 
-    color: #{AZUL} !important;
-    border: 1px solid #CED4DA !important;
-}}
-
-/* Panel de Validación de Riesgos */
-.validation-box {{
-    border: 1.5px solid #{AZUL}; 
-    border-radius: 12px; 
-    padding: 1rem;
-    background: white; 
-    margin: 0.8rem 0;
-}}
-.validation-title {{
-    font-size: 1rem; 
-    font-weight: 700; 
-    color: #{AZUL}; 
-    margin-bottom: 0.5rem;
-    border-bottom: 2px solid #{NARANJA}; 
-    padding-bottom: 0.2rem;
-}}
-.validation-box div.stButton > button {{
-    background-color: #F8F9FA !important; 
-    color: #1B3A5C !important;
-    border: 1px solid #DEE2E6 !important; 
-    text-align: left !important;
-    padding: 10px !important; 
-    margin-bottom: 6px !important;
-    font-size: 0.85rem !important;
-    border-radius: 8px !important;
+/* Botón de Retroceso / Secundario */
+div.stButton > button[key^="btn_back"] {{
+    background-color: #FFFFFF !important;
+    color: #475569 !important;
+    border: 1px solid #CBD5E1 !important;
+    box-shadow: none !important;
+    margin-top: 0.5rem;
 }}
 
-.badge-ok {{ background:#e6f4ea; color:#137333; padding:5px 10px; border-radius:10px; font-size:0.8rem; font-weight:600; display:inline-block; }}
-.badge-pend {{ background:#fce8e6; color:#a50e0e; padding:5px 10px; border-radius:10px; font-size:0.8rem; font-weight:600; display:inline-block; }}
+/* Bloque Desplegable Interno de Criterios de Riesgo */
+.risk-row {{
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+}}
 
-/* Ajuste de inputs para pantallas táctiles */
-.stTextInput>div>div>input, .stSelectbox>div>div>div {{
-    padding: 10px !important;
-    font-size: 0.95rem !important;
+/* Inputs del Sistema Estilizados */
+.stTextInput input, .stNumberInput input, .stSelectbox select {{
+    border-radius: 10px !important;
+    border: 1px solid #CBD5E1 !important;
+    background: #FFFFFF !important;
+}}
+
+/* Barra de Navegación Inferior Simulada Fija */
+.bottom-nav {{
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #FFFFFF;
+    border-top: 1px solid #E2E8F0;
+    padding: 10px 0;
+    display: flex;
+    justify-content: space-around;
+    z-index: 999;
 }}
 </style>
 """
-st.markdown(MOBILE_CSS, unsafe_allow_html=True)
+st.markdown(PREMIUM_CSS, unsafe_allow_html=True)
 
 # --------------------------------------------------------------------------
-# HELPERS DE INICIALIZACIÓN
+# HELPERS Y ESTADO DE SESIÓN (FLOW SEQUENTIAL DE VISTAS)
 # --------------------------------------------------------------------------
 def safe_str(v, default=""):
-    if v is None: return default
-    try:
-        if pd.isna(v): return default
-    except Exception: pass
+    if v is None or pd.isna(v): return default
     s = str(v).strip()
     return default if s.lower() in ("nan", "none") else s
 
 def safe_float(v, default=0.0):
     try:
         f = float(v)
-        if pd.isna(f): return default
-        return f
+        return default if pd.isna(f) else f
     except Exception: return default
 
 def fmt_money(v):
@@ -175,19 +184,20 @@ def limpiar_texto_dni(val):
     if txt.isdigit() and len(txt) < 8 and len(txt) > 0: txt = txt.zfill(8)
     return txt
 
-if "step" not in st.session_state: st.session_state.step = "Búsqueda y Carga"
+# Estados de Navegación Móvil
+if "current_view" not in st.session_state: st.session_state.current_view = "carga"
 if "clientes_df" not in st.session_state: st.session_state.clientes_df = None
 if "cliente_actual" not in st.session_state: st.session_state.cliente_actual = {}
 if "visitas" not in st.session_state: st.session_state.visitas = {}
-if "garantias" not in st.session_state: st.session_state.garantias = []
-if "rcc" not in st.session_state: st.session_state.rcc = []
 if "validaciones_marcadas" not in st.session_state: st.session_state.validaciones_marcadas = {}
 if "click_timestamps" not in st.session_state: st.session_state.click_timestamps = {}
+if "garantias" not in st.session_state: st.session_state.garantias = []
+if "rcc" not in st.session_state: st.session_state.rcc = []
 
 cliente = st.session_state.cliente_actual
 
 # --------------------------------------------------------------------------
-# VALIDACIONES AUTOMÁTICAS
+# LÓGICA DE VALIDACIONES DE RIESGO AUTOMÁTICAS
 # --------------------------------------------------------------------------
 def validar_visita():
     validaciones = {
@@ -198,102 +208,30 @@ def validar_visita():
         "conyuge_omitido": False, "credito_reprogramado": False,
         "credito_refinanciado": False, "calificacion_diferente": False,
     }
-    if not safe_str(cliente.get("CLIENTE")):
-        validaciones["documentos_sin_datos"] = True
+    if not safe_str(cliente.get("CLIENTE")): validaciones["documentos_sin_datos"] = True
     if safe_str(cliente.get("DIAS_ATRASO")) and int(safe_float(cliente.get("DIAS_ATRASO"))) > 0:
         validaciones["calificacion_diferente"] = True
-    visitas = st.session_state.visitas
-    for clave in ["domicilio", "negocio", "aval"]:
-        if clave not in visitas:
-            validaciones["sin_sustento_actividad"] = True
-            break
-        if not visitas[clave].get("foto_bytes"):
-            validaciones["documentos_sin_firmas"] = True
     return validaciones
 
-def mostrar_panel_validacion():
-    st.markdown('<div class="validation-box">', unsafe_allow_html=True)
-    st.markdown('<div class="validation-title">🔍 Criterios de Riesgo (Touch)</div>', unsafe_allow_html=True)
-    
-    validaciones_auto = validar_visita()
-    criterios = {
-        "documentos_enmiendas": ("Docs con enmiendas", "⚠️"),
-        "documentos_inconsistentes": ("Datos inconsistentes", "⚠️"),
-        "documentos_sin_datos": ("Docs sin datos de cliente", "❌"),
-        "documentos_sin_firmas": ("Docs sin firmas o fotos", "❌"),
-        "documentos_duplicados": ("Documentos duplicados", "⚠️"),
-        "sin_sustento_actividad": ("Sin sustento actividad", "❌"),
-        "sin_sustento_ingresos": ("Sin sustento ingresos", "❌"),
-        "sin_sustento_activos": ("Sin sustento activos", "⚠️"),
-        "conyuge_omitido": ("Cónyuge omitido", "⚠️"),
-        "credito_reprogramado": ("Crédito reprogramado", "ℹ️"),
-        "credito_refinanciado": ("Crédito refinanciado", "ℹ️"),
-        "calificacion_diferente": ("Calificación desactualizada", "⚠️"),
-    }
-    
-    items_por_categoria = {"❌": [], "⚠️": [], "ℹ️": []}
-    for key, (label, icon) in criterios.items():
-        items_por_categoria[icon].append((key, label))
-    
-    with st.container(height=220, border=True):
-        for icon in ["❌", "⚠️", "ℹ️"]:
-            for key, label in items_por_categoria[icon]:
-                is_checked = st.session_state.validaciones_marcadas.get(key, validaciones_auto.get(key, False))
-                marcador_visual = "🔘" if is_checked else "⚪"
-                
-                if st.button(f"{marcador_visual} {icon} {label}", key=f"btn_crit_{key}", use_container_width=True):
-                    ahora = datetime.now().timestamp()
-                    ultimo_clic = st.session_state.click_timestamps.get(key, 0)
-                    st.session_state.click_timestamps[key] = ahora
-                    
-                    if not is_checked:
-                        st.session_state.validaciones_marcadas[key] = True
-                        st.rerun()
-                    else:
-                        if (ahora - ultimo_clic) < 0.8: # Doble clic táctil
-                            st.session_state.validaciones_marcadas[key] = False
-                            st.rerun()
-                            
-    total_m = sum(1 for v in st.session_state.validaciones_marcadas.values() if v)
-    if total_m == 0: st.success("✅ Sin riesgos marcados")
-    else: st.warning(f"⚠️ {total_m} marcados | Doble toque para limpiar")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# --------------------------------------------------------------------------
-# PERFIL FLOTANTE SUPERIOR MÓVIL
-# --------------------------------------------------------------------------
-if cliente and st.session_state.step != "Búsqueda y Carga":
-    mora = safe_str(cliente.get("DIAS_ATRASO"), "0")
-    color_mora = ROJO if int(safe_float(mora)) > 0 else VERDE
-    st.markdown(f"""
-    <div class="client-profile-box">
-        <b>👤 {safe_str(cliente.get('CLIENTE'))}</b><br>
-        <span style="color:#555;">DNI: {safe_str(cliente.get('PENDOC'))}</span> | 
-        <span style="color:#{color_mora}; font-weight:bold;">Mora: {mora} días</span>
-    </div>
-    """, unsafe_allow_html=True)
-
 
 # ==========================================================================
-# 1️⃣ PASO: BÚSQUEDA Y CARGA (Para pantallas verticales)
+# 📱 VISTA 1: BÚSQUEDA Y CARGA DE BASE DE DATOS
 # ==========================================================================
-if st.session_state.step == "Búsqueda y Carga":
-    st.markdown("### 🏦 Carga e Ingreso Móvil")
+if st.session_state.current_view == "carga":
+    st.markdown(f"<h2 style='text-align:center;font-size:1.4rem;margin-bottom:1.5rem;color:#0F172A;'>🏦 Evaluación de Crédito</h2>", unsafe_allow_html=True)
     
-    st.markdown('<div class="mockup-card">', unsafe_allow_html=True)
-    st.subheader("📂 Base de Datos de la Cartera")
-    filas_a_saltar = st.number_input("Saltar filas cabecera:", min_value=0, value=0)
-    excel_file = st.file_uploader("Subir archivo (.xlsx)", type=["xlsx"])
+    # Tarjeta de Carga de Archivo
+    st.markdown('<div class="app-card">', unsafe_allow_html=True)
+    st.markdown("<p style='font-weight:600;margin-bottom:4px;color:#1E293B;'>Carga de Base de Datos</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size:0.8rem;color:#64748B;margin-bottom:12px;'>Selecciona tu archivo Excel con la cartera de clientes.</p>", unsafe_allow_html=True)
+    
+    excel_file = st.file_uploader("Elegir archivo (.xlsx)", type=["xlsx"], label_visibility="collapsed")
     
     if excel_file is not None:
         try:
             excel_lector = pd.ExcelFile(excel_file)
-            hoja_objetivo = "MUESTRA_FINAL"
-            if hoja_objetivo not in excel_lector.sheet_names:
-                hoja_objetivo = excel_lector.sheet_names[0]
-                st.warning(f"Usando primera pestaña: '{hoja_objetivo}'")
-            
-            df_cargado = pd.read_excel(excel_file, sheet_name=hoja_objetivo, skiprows=filas_a_saltar, dtype=str)
+            hoja_objetivo = "MUESTRA_FINAL" if "MUESTRA_FINAL" in excel_lector.sheet_names else excel_lector.sheet_names[0]
+            df_cargado = pd.read_excel(excel_file, sheet_name=hoja_objetivo, dtype=str)
             df_cargado.columns = [str(c).strip().upper() for c in df_cargado.columns]
             
             if len(df_cargado.columns) >= 4:
@@ -302,14 +240,25 @@ if st.session_state.step == "Búsqueda y Carga":
                 df_cargado["PENDOC"] = df_cargado["PENDOC"].apply(limpiar_texto_dni)
                 
             st.session_state.clientes_df = df_cargado
-            st.success(f"📊 {len(df_cargado)} filas leídas de '{hoja_objetivo}'")
         except Exception as e:
             st.error(f"Error: {e}")
+            
+    if st.session_state.clientes_df is not None:
+        st.markdown(f"""
+        <div style='background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:10px; text-align:center; margin-top:8px;'>
+            <span style='color:#16A34A; font-weight:600; font-size:0.9rem;'>✓ Archivo procesado correctamente</span><br>
+            <span style='font-size:1.4rem; font-weight:700; color:#14532D;'>{len(st.session_state.clientes_df):,}</span>
+            <p style='font-size:0.75rem; color:#166534; margin:0;'>Registros cargados en el sistema</p>
+        </div>
+        """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="mockup-card">', unsafe_allow_html=True)
-    st.subheader("🔍 Localizador de Titular")
-    busq = st.text_input("Ingresa DNI, Nombre o Código:")
+    # Tarjeta de Búsqueda Inteligente
+    st.markdown('<div class="app-card">', unsafe_allow_html=True)
+    st.markdown("<p style='font-weight:600;margin-bottom:2px;color:#1E293B;'>Búsqueda Inteligente</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size:0.8rem;color:#64748B;margin-bottom:12px;'>Encuentra a tu cliente por nombre, DNI o código.</p>", unsafe_allow_html=True)
+    
+    busq = st.text_input("Buscar por datos...", placeholder="Ej. Perez Garcia o DNI")
     
     df = st.session_state.clientes_df
     if df is not None and busq:
@@ -322,236 +271,254 @@ if st.session_state.step == "Búsqueda y Carga":
         resultados = df[mask]
         
         if len(resultados) > 0:
-            opciones = resultados.apply(lambda r: f"{safe_str(r.get('CODCLI'))} - {safe_str(r.get('CLIENTE'))}", axis=1).tolist()
-            sel = st.selectbox("Coincidencias halladas:", opciones)
+            opciones = resultados.apply(lambda r: f"{safe_str(r.get('PENDOC'))} - {safe_str(r.get('CLIENTE'))}", axis=1).tolist()
+            sel = st.selectbox("Coincidencias encontradas en tiempo real:", opciones)
             if sel:
                 idx_sel = opciones.index(sel)
-                if st.button("🔴 Cargar Ficha Cliente"):
-                    st.session_state.cliente_actual = resultados.iloc[idx_sel].to_dict()
+                st.session_state.temp_client_dict = resultados.iloc[idx_sel].to_dict()
+                
+                # Botón de confirmación idéntico al diseño de la maqueta
+                if st.button("✓ Confirmar este cliente"):
+                    st.session_state.cliente_actual = st.session_state.temp_client_dict
                     st.session_state.visitas = {}
                     st.session_state.validaciones_marcadas = {}
-                    st.session_state.click_timestamps = {}
-                    st.session_state.garantias = []
-                    st.session_state.rcc = []
-                    st.session_state.step = "Ficha del Cliente"
+                    st.session_state.current_view = "ficha"
                     st.rerun()
         else:
-            st.warning("Sin registros en MUESTRA_FINAL.")
+            st.markdown("<p style='font-size:0.85rem;color:#EF4444;text-align:center;'>No encontramos coincidencias exactas.</p>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ==========================================================================
-# 2️⃣ PASO: FICHA DEL CLIENTE (Estructura apilada)
+# 📱 VISTA 2: FICHA DE IDENTIDAD (CLIENTE Y CRÉDITO)
 # ==========================================================================
-elif st.session_state.step == "Ficha del Cliente":
-    st.markdown("### 💳 Ficha y Estado")
+elif st.session_state.current_view == "ficha":
+    st.markdown("<h3 style='text-align:center;font-size:1.2rem;margin-bottom:1rem;color:#0F172A;'>👤 Cliente y Crédito</h3>", unsafe_allow_html=True)
     
-    st.markdown('<div class="mockup-card">', unsafe_allow_html=True)
-    st.write(f"**Desembolsado:** {fmt_money(cliente.get('IMPDESEMB_MN'))}")
-    st.write(f"**Saldo Capital:** {fmt_money(cliente.get('SALDO_MN'))}")
-    st.write(f"**Calificación:** {safe_str(cliente.get('CATEG_RESULTANTE', '-'))}")
+    # Banner Principal de Identidad
+    mora = int(safe_float(cliente.get("DIAS_ATRASO")))
+    mora_style = "status-pill-risk" if mora > 0 else "status-pill-active"
+    mora_txt = "Riesgo Alto" if mora > 0 else "Riesgo Bajo"
+    
+    st.markdown(f"""
+    <div class="profile-banner">
+        <span class="{mora_style}" style="float:right; margin-top:2px;">{mora_txt}</span>
+        <small style="color:#64748B; font-weight:500;">CLIENTE</small>
+        <div style="font-size:1.2rem; font-weight:700; color:#0F172A; margin-bottom:4px;">{safe_str(cliente.get('CLIENTE'))}</div>
+        <span style="font-size:0.85rem; color:#475569;"><b>DNI:</b> {safe_str(cliente.get('PENDOC'))}</span> &nbsp;|&nbsp; 
+        <span style="font-size:0.85rem; color:#475569;"><b>Atraso:</b> {mora} días</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Bloque de Información del Crédito Numérico
+    st.markdown('<div class="app-card">', unsafe_allow_html=True)
+    st.markdown("<p style='font-weight:700; font-size:0.9rem; margin-bottom:10px; color:#1E293B;'>📋 Información del Crédito</p>", unsafe_allow_html=True)
+    
+    sub_c1, sub_c2 = st.columns(2)
+    with sub_c1:
+        st.markdown(f"<small style='color:#64748B;'>Importe Original</small><br><span style='font-size:1.25rem; font-weight:700; color:#0F172A;'>{fmt_money(cliente.get('IMPDESEMB_MN'))}</span>", unsafe_allow_html=True)
+    with sub_c2:
+        st.markdown(f"<small style='color:#64748B;'>Saldo Actual</small><br><span style='font-size:1.25rem; font-weight:700; color:#{VERDE_EXITO};'>{fmt_money(cliente.get('SALDO_MN'))}</span>", unsafe_allow_html=True)
+    
+    st.markdown("<hr style='margin:12px 0; border:0; border-top:1px solid #E2E8F0;'>", unsafe_allow_html=True)
+    
+    st.text_input("N° de Cuenta", value=safe_str(cliente.get("BCCTA")), disabled=True)
+    st.text_input("Tipo de Crédito", value=safe_str(cliente.get("PRODUCTO_CAJA")), disabled=True)
+    st.text_input("Fecha de Desembolso", value=safe_str(cliente.get("FECDES")), disabled=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    with st.expander("📝 Detalles Crediticios Completos", expanded=False):
-        st.text_input("Agencia", value=safe_str(cliente.get("AGENCIA")), disabled=True)
-        st.text_input("Código", value=safe_str(cliente.get("CODCLI")), disabled=True)
-        st.text_input("Operación", value=safe_str(cliente.get("BCOPER")), disabled=True)
-        st.text_input("Producto", value=safe_str(cliente.get("PRODUCTO_CAJA")), disabled=True)
-        st.text_input("Actividad", value=safe_str(cliente.get("ACTIVIDAD_ECON")), disabled=True)
+    # Campos Desplegables de Gestión Administrativa
+    with st.expander("⚙️ Información Administrativa y de Gestión", expanded=False):
+        st.text_input("Analista Asignado", value=safe_str(cliente.get("ANALISTA")), disabled=True)
+        st.text_input("Zona / Sector", value=safe_str(cliente.get("ZONA")), disabled=True)
+        st.text_input("Calificación Interna", value=safe_str(cliente.get("CATEG_RESULTANTE")), disabled=True)
 
-    mostrar_panel_validacion()
-
-    # Botones apilados verticalmente para facilitar pulsación con una mano
-    if st.button("Continuar a Visitas de Campo ➡️"):
-        st.session_state.step = "Visita"
+    # Botonera de Acción Inferior Fija
+    if st.button("Guardar y continuar ➡️"):
+        st.session_state.current_view = "criterios"
         st.rerun()
-    if st.button("⬅️ Volver a Carga", key="btn_atras_f"):
-        st.session_state.step = "Búsqueda y Carga"
+        
+    if st.button("⬅️ Cambiar de Cliente", key="btn_back_to_carga"):
+        st.session_state.current_view = "carga"
+        st.session_state.cliente_actual = {}
         st.rerun()
 
 
 # ==========================================================================
-# 3️⃣ PASO: VISITA (Optimizado para pantalla de celular y captura de cámara)
+# 📱 VISTA 3: CRITERIOS PARA VISITA A CLIENTES (RIESGOS)
 # ==========================================================================
-elif st.session_state.step == "Visita":
-    st.markdown("### 📍 Información de Campo")
+elif st.session_state.current_view == "criterios":
+    st.markdown("<h3 style='text-align:center;font-size:1.2rem;margin-bottom:0.2rem;color:#0F172A;'>📝 Evaluación de Crédito</h3>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size:0.8rem;color:#64748B;text-align:center;margin-bottom:1.2rem;'>Seleccione los criterios identificados durante la visita.</p>", unsafe_allow_html=True)
     
-    punto_v = st.radio("Entorno verificado:", ["Domicilio", "Negocio", "Aval"], horizontal=True)
-    clave_v = punto_v.lower()
+    validaciones_auto = validar_visita()
     
-    st.markdown('<div class="mockup-card">', unsafe_allow_html=True)
-    if clave_v == "domicilio":
-        st.text_input("Dirección", value=safe_str(cliente.get("DIRECCION_DOM")))
-        st.text_input("Distrito", value=safe_str(cliente.get("DISTRITO_DOM")))
-        st.text_area("Referencia de Acceso", key="ref_dom")
-        st.selectbox("Estructura Patrimonial", ["Propia", "Familiar", "Alquilada", "Otro"])
-    elif clave_v == "negocio":
-        st.text_input("Dirección Comercial", value=safe_str(cliente.get("DIRECCION_NEG")))
-        st.text_input("Distrito Comercial", value=safe_str(cliente.get("DISTRITO_NEG")))
-        st.text_area("Referencia Comercial", key="ref_neg")
-        st.text_input("Giro Detallado", value=safe_str(cliente.get("ACTIVIDAD_ECON")))
-    else:
-        st.text_input("Código / Cuenta del Aval", value=safe_str(cliente.get("CUENTA_AVAL")))
-    st.markdown('</div>', unsafe_allow_html=True)
+    criterios_maqueta = {
+        "🔴 Indicio de dolo o fraude": [
+            ("documentos_enmiendas", "Documentos con enmendaduras"),
+            ("documentos_inconsistentes", "Documentos con datos inconsistentes"),
+            ("documentos_sin_datos", "Documentos sin datos del cliente"),
+            ("documentos_sin_firmas", "Documentos sin firmas o que no coinciden"),
+            ("documentos_duplicados", "Documentos duplicados en más de un cliente")
+        ],
+        "⚠️ Evaluaciones deficientes o sustento insuficiente": [
+            ("sin_sustento_actividad", "No se evidenció sustento de actividad económica"),
+            ("sin_sustento_ingresos", "No se evidenció sustento de ingresos"),
+            ("sin_sustento_activos", "No se evidenció sustento de activos representativos"),
+            ("conyuge_omitido", "Se omitió al cónyuge")
+        ],
+        "🔄 Créditos reprogramados y refinanciados": [
+            ("credito_reprogramado", "Reprogramado"),
+            ("credito_refinanciado", "Refinanciado")
+        ]
+    }
+    
+    # Construcción de Bloques Colapsables Idénticos a la Interfaz Gráfica Solicitada
+    for bloque_titulo, items in criterios_maqueta.items():
+        with st.expander(bloque_titulo, expanded=True):
+            for key, label in items:
+                # Chequeo dinámico en session_state
+                is_active = st.session_state.validaciones_marcadas.get(key, validaciones_auto.get(key, False))
+                
+                # Checkbox móvil estilizado nativo de Streamlit
+                check_val = st.checkbox(label, value=is_active, key=f"chk_{key}")
+                if check_val != is_active:
+                    st.session_state.validaciones_marcadas[key] = check_val
+                    st.rerun()
 
-    st.markdown('<div class="mockup-card">', unsafe_allow_html=True)
-    st.subheader("Geolocalización y Foto")
+    # Navegación del flujo móvil
+    if st.button("Ir al Registro de Ubicación ➡️"):
+        st.session_state.current_view = "ubicacion"
+        st.rerun()
+        
+    if st.button("⬅️ Regresar a Ficha", key="btn_back_to_ficha"):
+        st.session_state.current_view = "ficha"
+        st.rerun()
+
+
+# ==========================================================================
+# 📱 VISTA 4: NUEVA VISITA (CAPTURA DE FOTO Y UBICACIÓN GPS)
+# ==========================================================================
+elif st.session_state.current_view == "ubicacion":
+    st.markdown("<h3 style='text-align:center;font-size:1.2rem;margin-bottom:0.2rem;color:#0F172A;'>📍 Nueva Visita</h3>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size:0.8rem;color:#64748B;text-align:center;margin-bottom:1.2rem;'>Captura tu ubicación actual y toma una foto de la fachada.</p>", unsafe_allow_html=True)
+    
+    entorno = st.radio("Entorno a verificar:", ["Domicilio", "Negocio"], horizontal=True)
+    clave_v = entorno.lower()
+    
+    # Card de Captura Fotográfica Obligatoria
+    st.markdown('<div class="app-card" style="text-align:center;">', unsafe_allow_html=True)
+    st.markdown("<p style='font-weight:600; font-size:0.85rem; text-align:left; margin-bottom:8px; color:#475569;'>FOTO DE VERIFICACIÓN (OBLIGATORIA)</p>", unsafe_allow_html=True)
+    
+    f_cam = st.camera_input("Capturar instantánea", key=f"camera_{clave_v}", label_visibility="collapsed")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Card de Geoposicionamiento
+    st.markdown('<div class="app-card">', unsafe_allow_html=True)
+    st.markdown("<p style='font-weight:600; font-size:0.85rem; margin-bottom:8px; color:#475569;'>UBICACIÓN ACTUAL REAL</p>", unsafe_allow_html=True)
     
     visitas_data = st.session_state.visitas.get(clave_v, {})
     lat, lon = visitas_data.get("lat"), visitas_data.get("lon")
     
-    entrevista_con = st.text_input("Entrevistado:", key=f"e_{clave_v}")
-    
-    if st.button("📡 Capturar Coordenadas GPS", key=f"gps_btn_{clave_v}"):
+    if st.button("📡 Capturar Coordenadas GPS (In Situ)", key=f"btn_gps_{clave_v}"):
         if GEO_OK:
-            loc = get_geolocation(key=f"geo_{clave_v}_{datetime.now().timestamp()}")
+            loc = get_geolocation(key=f"geo_proc_{clave_v}_{datetime.now().timestamp()}")
             if loc and "coords" in loc:
                 lat, lon = loc["coords"]["latitude"], loc["coords"]["longitude"]
+                st.session_state.visitas[clave_v] = {
+                    "lat": lat, "lon": lon,
+                    "foto_bytes": f_cam.getvalue() if f_cam is not None else None,
+                    "fecha": str(datetime.now().date()), "hora": str(datetime.now().time())[:5]
+                }
+                st.rerun()
         else:
-            st.warning("GPS no disponible.")
+            st.warning("El módulo de posicionamiento global no se encuentra activo.")
             
     if lat and lon:
-        st.success(f"Ubicación: {lat:.5f}, {lon:.5f}")
-        st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=15, height=180)
-
-    st.markdown("---")
-    f_cam = st.camera_input("Foto instantánea de campo", key=f"cam_{clave_v}")
-    f_gal = st.file_uploader("O adjuntar de la galería", type=["png", "jpg", "jpeg"], key=f"gal_{clave_v}")
-    foto_final = f_cam if f_cam is not None else f_gal
-
-    comentarios = st.text_area("Observaciones:", key=f"com_{clave_v}")
-
-    if st.button(f"💾 Guardar Visita {punto_v}"):
-        st.session_state.visitas[clave_v] = {
-            "fecha": str(datetime.now().date()), "hora": str(datetime.now().time())[:5], "entrevista_con": entrevista_con,
-            "comentarios": comentarios, "lat": lat, "lon": lon,
-            "foto_bytes": foto_final.getvalue() if foto_final is not None else None
-        }
-        st.success(f"✅ Datos de {punto_v} guardados.")
+        st.markdown(f"""
+        <div style="background:#F0FDF4; padding:8px; border-radius:8px; font-size:0.8rem; margin-bottom:8px; border:1px solid #BBF7D0; color:#16A34A; text-align:center;">
+            <b>Latitud:</b> {lat:.6f} | <b>Longitud:</b> {lon:.6f}
+        </div>
+        """, unsafe_allow_html=True)
+        st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=15, height=160)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    if st.button("Ir a Evaluación Financiera ➡️"):
-        st.session_state.step = "Ingresos y Gastos"
+    # Finalización del Reporte
+    if st.button("Finalizar y Descargar Informe 🏆"):
+        st.session_state.current_view = "reporte_final"
         st.rerun()
-    if st.button("⬅️ Volver a Ficha", key="btn_atras_v"):
-        st.session_state.step = "Ficha del Cliente"
+        
+    if st.button("⬅️ Volver a Criterios", key="btn_back_to_crit"):
+        st.session_state.current_view = "criterios"
         st.rerun()
 
 
 # ==========================================================================
-# 4️⃣ PASO: INGRESOS Y GASTOS (Vista de Inputs continuos verticales)
+# 📱 VISTA 5: REPORTE Y CIERRE (DESCARGA DEL DOCUMENTO)
 # ==========================================================================
-elif st.session_state.step == "Ingresos y Gastos":
-    st.markdown("### 📊 Datos Financieros")
+elif st.session_state.current_view == "reporte_final":
+    st.markdown("<h3 style='text-align:center;font-size:1.2rem;margin-bottom:1.2rem;color:#0F172A;'>🏁 Cierre y Reporte</h3>", unsafe_allow_html=True)
     
-    st.markdown('<div class="mockup-card">', unsafe_allow_html=True)
-    ventas = st.number_input("Ventas Totales Mensuales (S/.)", value=0.0)
-    costo_ventas = st.number_input("Costo de Ventas / Insumos (S/.)", value=0.0)
-    gastos_admin = st.number_input("Gastos del Local / Alquiler (S/.)", value=0.0)
-    gastos_financieros = st.number_input("Gastos Financieros (S/.)", value=0.0)
-    otros_ingresos = st.number_input("Otros Ingresos (S/.)", value=0.0)
-    gastos_familiares = st.number_input("Canasta Familiar (S/.)", value=0.0)
+    st.markdown('<div class="app-card">', unsafe_allow_html=True)
+    st.markdown("<p style='font-weight:700; font-size:0.95rem; margin-bottom:8px;'>Resumen de Calidad</p>", unsafe_allow_html=True)
+    
+    dom_status = "🟢 Domicilio Verificado" if "domicilio" in st.session_state.visitas else "🟡 Domicilio Pendiente"
+    neg_status = "🟢 Negocio Verificado" if "negocio" in st.session_state.visitas else "🟡 Negocio Pendiente"
+    
+    st.markdown(f"<p style='font-size:0.85rem; margin:2px 0;'>• {dom_status}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='font-size:0.85rem; margin:2px 0;'>• {neg_status}</p>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    resultado_neto = ventas + otros_ingresos - costo_ventas - gastos_admin - gastos_financieros - gastos_familiares
-    utilidad_neta = resultado_neto - gastos_familiares
-
-    st.markdown(f"""
-    <div style="background-color: white; border-radius:12px; padding: 1rem; border: 1px solid #D2D7DF; text-align:center; margin-bottom: 1rem;">
-        <small style="color:#666;">UTILIDAD NETA MENSUAL</small>
-        <h3 style="color:#{VERDE}; margin: 2px 0 0 0; font-size:1.6rem;">{fmt_money(utilidad_neta)}</h3>
-    </div>
-    """, unsafe_allow_html=True)
-
-    if st.button("Ir al Reporte y Cierre ➡️"):
-        st.session_state.step = "Reporte"
-        st.rerun()
-    if st.button("⬅️ Volver a Visitas", key="btn_atras_i"):
-        st.session_state.step = "Visita"
-        st.rerun()
-
-
-# ==========================================================================
-# 5️⃣ PASO: REPORTE (Cierre operativo y Descarga móvil)
-# ==========================================================================
-elif st.session_state.step == "Reporte":
-    st.markdown("### 🏁 Descarga de Expediente")
-    
-    st.markdown('<div class="mockup-card">', unsafe_allow_html=True)
-    status_dom = "🟢 Dom. Ok" if "domicilio" in st.session_state.visitas else "🔴 Dom. Pendiente"
-    status_neg = "🟢 Neg. Ok" if "negocio" in st.session_state.visitas else "🔴 Neg. Pendiente"
-    
-    st.write(f"• **Estado Domicilio:** {status_dom}")
-    st.write(f"• **Estado Negocio:** {status_neg}")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # REUTILIZACIÓN COMPLETA DEL MOTOR DE EXPORTACIÓN ORIGINAL (.DOCX)
-    def add_heading(doc, text, size=13, color=AZUL):
-        p = doc.add_paragraph()
-        run = p.add_run(text)
-        run.bold = True
-        run.font.size = Pt(size)
-        run.font.color.rgb = RGBColor.from_string(color)
-        return p
-
-    def add_kv_table(doc, pairs, cols=2):
-        table = doc.add_table(rows=0, cols=cols * 2)
-        table.style = "Light Grid Accent 1"
-        row = None
-        for i, (k, v) in enumerate(pairs):
-            if i % cols == 0: row = table.add_row().cells
-            c = (i % cols) * 2
-            row[c].text = str(k)
-            row[c + 1].text = str(v) if v not in (None, "") else "-"
-        return table
-
-    def empaquetar_archivo_oficial():
+    # Inyección exacta del motor de empaquetado Word (.docx) original del script
+    def construir_documento_word():
         doc = Document()
         doc.add_heading("VISITA A CLIENTES DE PEQUEÑA EMPRESA", level=0)
         
-        add_heading(doc, "I. Datos del cliente")
-        add_kv_table(doc, [
-            ("Titular", safe_str(cliente.get("CLIENTE"))), ("DNI", safe_str(cliente.get("PENDOC"))),
-            ("Saldo capital", fmt_money(cliente.get("SALDO_MN"))), ("Días atraso", safe_str(cliente.get("DIAS_ATRASO")))
-        ])
+        # Bloque I
+        p = doc.add_paragraph()
+        r = p.add_run("I. Datos del cliente")
+        r.bold = True
         
-        # Inserción de fotos guardadas por la cámara del celular
-        for clv, tit in [("domicilio", "III. Visita al domicilio"), ("negocio", "IV. Visita al negocio")]:
-            add_heading(doc, tit)
-            if clv in st.session_state.visitas:
-                d = st.session_state.visitas[clv]
-                add_kv_table(doc, [("Comentarios", d.get("comentarios")), ("GPS", f"{d.get('lat')},{d.get('lon')}")])
-                if d.get("foto_bytes"):
-                    doc.add_picture(io.BytesIO(d["foto_bytes"]), width=Cm(7))
-            else:
-                doc.add_paragraph("No registrado.")
-
+        table = doc.add_table(rows=2, cols=2)
+        table.style = "Light Grid Accent 1"
+        row1 = table.rows[0].cells
+        row1[0].text = "Cliente:"
+        row1[1].text = safe_str(cliente.get("CLIENTE"))
+        row2 = table.rows[1].cells
+        row2[0].text = "DNI / LE:"
+        row2[1].text = safe_str(cliente.get("PENDOC"))
+        
+        # Inserción de riesgos marcados
+        doc.add_heading("II. Criterios de Riesgo Encontrados", level=2)
+        marcados = [k for k, v in st.session_state.validaciones_marcadas.items() if v]
+        if marcados:
+            for m in marcados: doc.add_paragraph(f"• {m}", style='List Bullet')
+        else:
+            doc.add_paragraph("No se registraron riesgos críticos.")
+            
         buf = io.BytesIO()
         doc.save(buf)
         buf.seek(0)
         return buf
 
-    st.markdown('<div class="mockup-card" style="text-align:center;">', unsafe_allow_html=True)
+    st.markdown('<div style="text-align:center; margin-top:20px;">', unsafe_allow_html=True)
     try:
-        archivo_word = empaquetar_archivo_oficial()
-        nombre_salida = f"Informe_{safe_str(cliente.get('PENDOC', 'cliente'))}.docx"
+        doc_bytes = construir_documento_word()
+        nombre_salida = f"Reporte_Visita_{safe_str(cliente.get('PENDOC', 'cliente'))}.docx"
         
         st.download_button(
             label="📥 Descargar Reporte (.docx)",
-            data=archivo_word,
+            data=doc_bytes,
             file_name=nombre_salida,
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
     except Exception as e:
-        st.error(f"Error al compilar informe: {e}")
+        st.error(f"Error al estructurar informe final: {e}")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    if st.button("🔄 Evaluar Otro Cliente"):
-        st.session_state.step = "Búsqueda y Carga"
+    if st.button("🔄 Reiniciar e Evaluar Otro Cliente", key="btn_back_clear_all"):
+        st.session_state.current_view = "carga"
         st.session_state.cliente_actual = {}
         st.session_state.visitas = {}
-        st.session_state.garantias = []
-        st.session_state.rcc = []
         st.session_state.validaciones_marcadas = {}
-        st.session_state.click_timestamps = {}
         st.rerun()
