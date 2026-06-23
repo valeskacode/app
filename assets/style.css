@@ -1,12 +1,22 @@
 /* assets/style.css */
 .stApp { background-color: #F8FAFC; }
-.block-container { max-width: 450px !important; padding: 1rem !important; }
+.block-container { max-width: 450px !important; padding-top: 2rem !important; }
+
 .card { 
-    background: white; padding: 20px; border-radius: 20px; 
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 15px; 
+    background: white; 
+    padding: 20px; 
+    border-radius: 20px; 
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+    margin-bottom: 20px; 
+    border: 1px solid #EDF2E7; 
 }
+
 div.stButton > button { 
-    width: 100%; border-radius: 12px; height: 50px; 
-    background-color: #D31118; color: white; font-weight: bold; border: none;
+    width: 100%; 
+    border-radius: 12px; 
+    height: 50px; 
+    background-color: #C8102E !important; 
+    color: white !important; 
+    font-weight: 700 !important; 
+    border: none !important; 
 }
-header { visibility: hidden; }
