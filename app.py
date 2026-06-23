@@ -40,32 +40,54 @@ def render_panel_riesgos():
             st.markdown("</div>", unsafe_allow_html=True)
 
 def pantalla_busqueda():
+    # Usamos un contenedor para organizar mejor el buscador
     st.markdown('<div class="card" style="text-align: center;">', unsafe_allow_html=True)
     st.title("🏦 Buscador de Clientes")
+    
+    # 1. Carga del archivo
     archivo = st.file_uploader("Cargar Base Excel (MUESTRA_FINAL)", type=["xlsx"])
     
     if archivo is not None:
         try:
-            # 1. Usamos una lectura más flexible
-            # Agregamos 'engine="openpyxl"' explícitamente para móviles
+            # Forzamos lectura con openpyxl
             df = pd.read_excel(archivo, sheet_name="MUESTRA_FINAL", header=0, engine="openpyxl")
-            
-            # 2. Convertimos columnas a string y limpiamos espacios/mayúsculas
             df.columns = [str(c).strip().upper() for c in df.columns]
             
-            # 3. Debug: Si falla, mostraremos qué columnas ve el móvil
-            if "DOCPEN" in df.columns and "CLIENTE" in df.columns:
-                st.session_state.df = df
-                st.success("Base cargada exitosamente")
-            else:
-                st.error("Error: Columnas no encontradas.")
-                st.write("Columnas detectadas en el móvil:", list(df.columns))
-                st.info("Asegúrate de que la pestaña se llame 'MUESTRA_FINAL' y la primera fila tenga los títulos.")
-                
+            # Guardamos el df en session_state para que no se pierda
+            st.session_state.df = df
+            st.success("Base cargada correctamente")
         except Exception as e:
-            st.error(f"Error técnico en móvil: {e}")
+            st.error(f"Error al cargar: {e}")
+
+    # 2. Buscador: Solo aparece si ya cargamos datos
+    if st.session_state.df is not None:
+        st.write("---")
+        busqueda = st.text_input("Ingresa el DNI o Nombre para buscar:")
+        
+        if busqueda:
+            df = st.session_state.df
+            # Filtro robusto
+            res = df[
+                df["DOCPEN"].astype(str).str.contains(busqueda, na=False) | 
+                df["CLIENTE"].astype(str).str.contains(busqueda, case=False, na=False)
+            ]
             
-    # ... resto de la lógica de búsqueda ...
+            if not res.empty:
+                st.write(f"Resultados encontrados: {len(res)}")
+                # Mostramos una tabla breve de los resultados encontrados
+                st.dataframe(res[["DOCPEN", "CLIENTE"]], use_container_width=True)
+                
+                if st.button("Abrir Ficha del Cliente"):
+                    # Seleccionamos la primera coincidencia
+                    st.session_state.cliente_actual = res.iloc[0].to_dict()
+                    st.session_state.view = "ficha"
+                    st.rerun()
+            else:
+                st.warning("No se encontraron coincidencias para esa búsqueda.")
+    else:
+        st.info("Por favor, carga el archivo Excel para habilitar la búsqueda.")
+        
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def pantalla_ficha():
     c = st.session_state.cliente_actual
