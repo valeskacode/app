@@ -1,12 +1,29 @@
-/* assets/style.css */
-.stApp { background-color: #F8FAFC; }
-.block-container { max-width: 450px !important; padding: 1rem !important; }
+/* assets/estilo.css */
+.stApp { background-color: #F8FAFC !important; }
+
+.block-container { 
+    max-width: 450px !important; 
+    padding-top: 2rem !important; 
+}
+
 .card { 
-    background: white; padding: 20px; border-radius: 20px; 
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 15px; 
+    background: white; 
+    padding: 25px; 
+    border-radius: 20px; 
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+    margin-bottom: 20px;
+    border: 1px solid #EDF2F7;
 }
+
 div.stButton > button { 
-    width: 100%; border-radius: 12px; height: 50px; 
-    background-color: #D31118; color: white; font-weight: bold; border: none;
+    background-color: #C8102E !important; 
+    color: white !important; 
+    border-radius: 12px !important; 
+    height: 50px !important; 
+    font-weight: 700 !important;
 }
-header { visibility: hidden; }
+
+.stTextInput input { 
+    border-radius: 12px !important; 
+    border: 1px solid #CBD5E0 !important; 
+}
