@@ -73,9 +73,44 @@ def pantalla_busqueda():
     st.markdown('</div>', unsafe_allow_html=True)
 
 def pantalla_ficha():
-    c = st.session_state.cliente_actual
-    st.markdown(f'<div class="card"><h1>{c.get("CLIENTE")}</h1><p>DNI: {c.get("DOCPEN")}</p></div>', unsafe_allow_html=True)
+  c = st.session_state.cliente_actual
     
+    # 1. Dashboard de Estado Superior (Fijo y con cambio de color según riesgo)
+    atraso = int(c.get("DIAS_ATRASO", 0))
+    # Lógica de color: Verde (<30), Amarillo (31-60), Rojo (>60)
+    color_riesgo = "#10B981" if atraso <= 30 else ("#F59E0B" if atraso <= 60 else "#EF4444")
+    
+    st.markdown(f"""
+        <div style="background-color:{color_riesgo}; padding:20px; border-radius:15px; color:white; text-align:center;">
+            <h2 style="margin:0;">{c.get("CLIENTE")}</h2>
+            <p style="font-size:1.2rem; margin:5px 0;">DNI: {c.get("DOCPEN")}</p>
+            <div style="font-weight:bold; font-size:1.1rem;">Días de Atraso: {atraso}</div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.write("---") # Separador visual
+
+    # 2. Expander para campos de lectura (Ahorro de espacio vertical)
+    with st.expander("ℹ️ Ver detalles técnicos del crédito"):
+        col1, col2 = st.columns(2)
+        col1.write(f"**Analista:** {c.get('ANALISTA')}")
+        col2.write(f"**Cuenta:** {c.get('BCCTA')}")
+        st.write(f"**Producto:** {c.get('PRODUCTO_CAJA')}")
+        st.write(f"**Agencia:** {c.get('AGENCIA')}")
+
+    # 3. Inputs de lectura rápida (Fuente grande para el sol)
+    st.markdown("""
+        <style>
+        .big-font { font-size: 1.5rem !important; font-weight: bold; }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    st.subheader("Control Financiero")
+    # Usamos st.text_input con CSS para simular tamaño grande
+    st.markdown('<div class="big-font">', unsafe_allow_html=True)
+    st.number_input("Importe Desembolsado (S/)", value=float(c.get("IMPDESEMB_MN", 0)), format="%.2f")
+    st.number_input("Saldo Actual (S/)", value=float(c.get("SALDO_MN", 0)), format="%.2f")
+    st.markdown('</div>', unsafe_allow_html=True)
     tabs = st.tabs(["📋 Evaluar", "🏠 Domicilio", "💼 Negocio", "💰 Financiero", "📍 GPS", "📸 Fotos", "📄 Reporte"])
     
     with tabs[0]:
