@@ -90,7 +90,7 @@ def pantalla_ficha():
     
     st.write("---") 
 
-    # 2. Expander para campos de lectura
+    # 2. Expander para detalles técnicos (Cerrado por defecto)
     with st.expander("ℹ️ Ver detalles técnicos del crédito"):
         col1, col2 = st.columns(2)
         col1.write(f"**Analista:** {c.get('ANALISTA')}")
@@ -98,57 +98,51 @@ def pantalla_ficha():
         st.write(f"**Producto:** {c.get('PRODUCTO_CAJA')}")
         st.write(f"**Agencia:** {c.get('AGENCIA')}")
 
-    # 3. Inputs de lectura rápida
+    # 3. Inputs de lectura rápida (Fuentes grandes)
     st.subheader("Control Financiero")
+    # Usamos valores convertidos a float para evitar errores
     st.number_input("Importe Desembolsado (S/)", value=float(c.get("IMPDESEMB_MN", 0)), format="%.2f")
     st.number_input("Saldo Actual (S/)", value=float(c.get("SALDO_MN", 0)), format="%.2f")
 
-    # Tabs
-    tabs = st.tabs(["📋 Evaluar", "🏠 Domicilio", "💼 Negocio", "📍 GPS", "📸 Fotos", "📄 Reporte"])
-    
-    with tabs[0]:
-        render_panel_riesgos()
-        if st.button("Guardar Evaluación"): 
-            st.success("Datos guardados")
-    with tabs[1]:
-        st.write(f"**Dirección:** {c.get('DIRECCION_DOM')}")
-    with tabs[2]:
-        st.write(f"**Actividad:** {c.get('ACTIVIDAD_ECON')}")
-    with tabs[3]:
-        st.write("Funcionalidad GPS...")
-    with tabs[4]:
-        st.file_uploader("Subir evidencias", accept_multiple_files=True)
-    with tabs[5]:
-        if st.button("Generar Informe Word"): 
-            st.info("Generando...")
-
-    if st.button("← Volver a Búsqueda"):
-        st.session_state.cliente_actual = None
-        st.session_state.view = "busqueda"
-        st.rerun()
-    
+    # 4. TABS ÚNICOS (Estructura jerárquica)
     tabs = st.tabs(["📋 Evaluar", "🏠 Domicilio", "💼 Negocio", "💰 Financiero", "📍 GPS", "📸 Fotos", "📄 Reporte"])
     
-    with tabs[0]:
+    with tabs[0]: # Evaluar
         render_panel_riesgos()
-        if st.button("Guardar Evaluación"): st.success("Datos guardados")
-    with tabs[1]:
+        if st.button("Guardar Evaluación"): 
+            st.success("Evaluación guardada exitosamente")
+            
+    with tabs[1]: # Domicilio
         st.write(f"**Dirección:** {c.get('DIRECCION_DOM')}")
-    with tabs[2]:
+        
+    with tabs[2]: # Negocio
         st.write(f"**Actividad:** {c.get('ACTIVIDAD_ECON')}")
-    with tabs[3]:
+        
+    with tabs[3]: # Financiero
         st.metric("Saldo Total", f"S/ {c.get('SALDO_MN', '0')}")
-    with tabs[4]:
-        st.write("Funcionalidad GPS...")
-    with tabs[5]:
+        
+    with tabs[4]: # GPS
+        st.write("Funcionalidad GPS en desarrollo...")
+        
+    with tabs[5]: # Fotos
         st.file_uploader("Subir evidencias", accept_multiple_files=True)
-    with tabs[6]:
-        if st.button("Generar Informe Word"): st.info("Generando...")
+        
+    with tabs[6]: # Reporte
+        if st.button("Generar Informe Word"): 
+            st.info("Generando informe automático...")
 
+    # 5. Botón de navegación global (Fuera de los tabs)
+    st.divider()
     if st.button("← Volver a Búsqueda"):
         st.session_state.cliente_actual = None
         st.session_state.view = "busqueda"
         st.rerun()
+
+# --- ROUTER (El final del archivo) ---
+if st.session_state.view == "busqueda": 
+    pantalla_busqueda()
+else: 
+    pantalla_ficha()
 
 # --- ROUTER ---
 if st.session_state.view == "busqueda": pantalla_busqueda()
