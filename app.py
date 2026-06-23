@@ -20,29 +20,26 @@ def pantalla_busqueda():
     
     if archivo:
         try:
-            # Leemos la hoja específica. Si tus encabezados no están en la primera fila, cambia header=0 por header=1
             df = pd.read_excel(archivo, sheet_name="MUESTRA_FINAL", header=0, dtype=str)
-            
-            # Limpieza: eliminar espacios en nombres de columnas y convertir a mayúsculas
             df.columns = [str(c).strip().upper() for c in df.columns]
             
-            # Validación de columnas necesarias
-            if "PENDOC" in df.columns and "CLIENTE" in df.columns:
+            # --- CORRECCIÓN AQUÍ: Usamos DOCPEN ---
+            if "DOCPEN" in df.columns and "CLIENTE" in df.columns:
                 st.session_state.df = df
                 st.success("Base cargada exitosamente")
             else:
-                st.error("Error: Las columnas requeridas (PENDOC, CLIENTE) no existen.")
+                st.error("Error: No se encontraron las columnas DOCPEN y CLIENTE.")
                 st.write("Columnas detectadas:", list(df.columns))
                 
         except Exception as e:
-            st.error(f"Error al procesar el archivo: {e}")
+            st.error(f"Error al procesar: {e}")
 
     if st.session_state.df is not None:
         busqueda = st.text_input("Buscar por DNI o Nombre")
         if busqueda:
             df = st.session_state.df
-            # Filtro: busca coincidencia en PENDOC o CLIENTE
-            res = df[df["PENDOC"].str.contains(busqueda, na=False) | 
+            # --- CORRECCIÓN AQUÍ: Filtramos por DOCPEN ---
+            res = df[df["DOCPEN"].str.contains(busqueda, na=False) | 
                      df["CLIENTE"].str.contains(busqueda, case=False, na=False)]
             
             if not res.empty:
@@ -58,7 +55,7 @@ def pantalla_busqueda():
 def pantalla_ficha():
     cliente = st.session_state.cliente_actual
     if cliente:
-        st.markdown(f'<div class="card"><h2>{cliente.get("CLIENTE")}</h2><p>DNI: {cliente.get("PENDOC")}</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="card"><h2>{cliente.get("CLIENTE")}</h2><p>DNI: {cliente.get("DOCPEN")}</p></div>', unsafe_allow_html=True)
     
     if st.button("← Volver a Búsqueda"):
         st.session_state.cliente_actual = None
