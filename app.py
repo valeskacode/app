@@ -73,9 +73,9 @@ def pantalla_busqueda():
     st.markdown('</div>', unsafe_allow_html=True)
 
 def pantalla_ficha():
-  c = st.session_state.cliente_actual
+    c = st.session_state.cliente_actual
     
-    # 1. Dashboard de Estado Superior (Fijo y con cambio de color según riesgo)
+    # 1. Dashboard de Estado Superior
     atraso = int(c.get("DIAS_ATRASO", 0))
     # Lógica de color: Verde (<30), Amarillo (31-60), Rojo (>60)
     color_riesgo = "#10B981" if atraso <= 30 else ("#F59E0B" if atraso <= 60 else "#EF4444")
@@ -88,9 +88,9 @@ def pantalla_ficha():
         </div>
     """, unsafe_allow_html=True)
     
-    st.write("---") # Separador visual
+    st.write("---") 
 
-    # 2. Expander para campos de lectura (Ahorro de espacio vertical)
+    # 2. Expander para campos de lectura
     with st.expander("ℹ️ Ver detalles técnicos del crédito"):
         col1, col2 = st.columns(2)
         col1.write(f"**Analista:** {c.get('ANALISTA')}")
@@ -98,19 +98,35 @@ def pantalla_ficha():
         st.write(f"**Producto:** {c.get('PRODUCTO_CAJA')}")
         st.write(f"**Agencia:** {c.get('AGENCIA')}")
 
-    # 3. Inputs de lectura rápida (Fuente grande para el sol)
-    st.markdown("""
-        <style>
-        .big-font { font-size: 1.5rem !important; font-weight: bold; }
-        </style>
-    """, unsafe_allow_html=True)
-    
+    # 3. Inputs de lectura rápida
     st.subheader("Control Financiero")
-    # Usamos st.text_input con CSS para simular tamaño grande
-    st.markdown('<div class="big-font">', unsafe_allow_html=True)
     st.number_input("Importe Desembolsado (S/)", value=float(c.get("IMPDESEMB_MN", 0)), format="%.2f")
     st.number_input("Saldo Actual (S/)", value=float(c.get("SALDO_MN", 0)), format="%.2f")
-    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Tabs
+    tabs = st.tabs(["📋 Evaluar", "🏠 Domicilio", "💼 Negocio", "📍 GPS", "📸 Fotos", "📄 Reporte"])
+    
+    with tabs[0]:
+        render_panel_riesgos()
+        if st.button("Guardar Evaluación"): 
+            st.success("Datos guardados")
+    with tabs[1]:
+        st.write(f"**Dirección:** {c.get('DIRECCION_DOM')}")
+    with tabs[2]:
+        st.write(f"**Actividad:** {c.get('ACTIVIDAD_ECON')}")
+    with tabs[3]:
+        st.write("Funcionalidad GPS...")
+    with tabs[4]:
+        st.file_uploader("Subir evidencias", accept_multiple_files=True)
+    with tabs[5]:
+        if st.button("Generar Informe Word"): 
+            st.info("Generando...")
+
+    if st.button("← Volver a Búsqueda"):
+        st.session_state.cliente_actual = None
+        st.session_state.view = "busqueda"
+        st.rerun()
+    
     tabs = st.tabs(["📋 Evaluar", "🏠 Domicilio", "💼 Negocio", "💰 Financiero", "📍 GPS", "📸 Fotos", "📄 Reporte"])
     
     with tabs[0]:
