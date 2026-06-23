@@ -39,33 +39,46 @@ def render_panel_riesgos():
 def pantalla_busqueda():
     st.markdown('<div class="card" style="text-align: center;">', unsafe_allow_html=True)
     st.title("🏦 Buscador de Clientes")
+    
     archivo = st.file_uploader("Cargar Base Excel", type=["xlsx"])
     
     if archivo is not None:
         try:
-            df = pd.read_excel(archivo, sheet_name=0, engine="openpyxl")
+            # 1. Cargamos TODO el archivo para tener los datos de la ficha
+            df = pd.read_excel(archivo, sheet_name="MUESTRA_FINAL", engine="openpyxl")
+            
+            # 2. Estandarizamos columnas
             df.columns = [str(c).strip().upper().replace(" ", "_") for c in df.columns]
+            
+            # 3. Guardamos todo el DataFrame en el estado
             st.session_state.df = df.astype(str)
-            st.success("Base cargada correctamente")
+            st.success("Base cargada correctamente.")
         except Exception as e:
-            st.error(f"Error al cargar: {e}")
+            st.error(f"Error al cargar el Excel: {e}")
 
+    # 4. Lógica de búsqueda (Lo que faltaba)
     if st.session_state.df is not None:
-        busqueda = st.text_input("Buscar por DNI o Nombre")
+        busqueda = st.text_input("Ingresa DNI o Nombre para buscar:")
+        
         if busqueda:
             df = st.session_state.df
-            # Filtro corregido para buscar en columnas estandarizadas
-            res = df[df.apply(lambda row: busqueda.lower() in str(row.values).lower(), axis=1)]
+            # Filtramos en todas las columnas disponibles
+            mask = df["DOCPEN"].str.contains(busqueda, na=False) | \
+                   df["CLIENTE"].str.contains(busqueda, case=False, na=False)
             
-            if not res.empty:
-                st.write(f"Resultados encontrados: {len(res)}")
-                for idx, fila in res.head(5).iterrows():
-                    if st.button(f"Abrir: {fila.get('CLIENTE', 'N/A')}", key=f"btn_{idx}"):
+            resultados = df[mask]
+            
+            if not resultados.empty:
+                st.write(f"Resultados: {len(resultados)}")
+                for idx, fila in resultados.head(5).iterrows():
+                    # Mostramos un botón que guarda toda la fila (el cliente completo)
+                    if st.button(f"Abrir: {fila['CLIENTE']} ({fila['DOCPEN']})", key=f"btn_{idx}"):
                         st.session_state.cliente_actual = fila.to_dict()
                         st.session_state.view = "ficha"
                         st.rerun()
             else:
                 st.warning("No se encontraron coincidencias.")
+    
     st.markdown('</div>', unsafe_allow_html=True)
 
 def pantalla_ficha():
