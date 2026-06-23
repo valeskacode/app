@@ -37,49 +37,33 @@ def render_panel_riesgos():
             st.markdown("</div>", unsafe_allow_html=True)
 
 def pantalla_busqueda():
-    st.markdown('<div class="card" style="text-align: center;">', unsafe_allow_html=True)
     st.title("🏦 Buscador de Clientes")
-    
     archivo = st.file_uploader("Cargar Base Excel", type=["xlsx"])
     
     if archivo is not None:
         try:
-            # 1. Cargamos TODO el archivo para tener los datos de la ficha
-            df = pd.read_excel(archivo, sheet_name="MUESTRA_FINAL", engine="openpyxl")
+            # 1. Creamos un objeto ExcelFile (Esto es muy ligero, no gasta RAM)
+            xls = pd.ExcelFile(archivo, engine="openpyxl")
             
-            # 2. Estandarizamos columnas
-            df.columns = [str(c).strip().upper().replace(" ", "_") for c in df.columns]
-            
-            # 3. Guardamos todo el DataFrame en el estado
-            st.session_state.df = df.astype(str)
-            st.success("Base cargada correctamente.")
-        except Exception as e:
-            st.error(f"Error al cargar el Excel: {e}")
+            # 2. Elegimos la hoja de forma segura
+            hoja_objetivo = "MUESTRA_FINAL"
+            if hoja_objetivo not in xls.sheet_names:
+                st.error(f"No se encuentra la hoja '{hoja_objetivo}'. Hojas disponibles: {xls.sheet_names}")
+                return
 
-    # 4. Lógica de búsqueda (Lo que faltaba)
-    if st.session_state.df is not None:
-        busqueda = st.text_input("Ingresa DNI o Nombre para buscar:")
-        
-        if busqueda:
-            df = st.session_state.df
-            # Filtramos en todas las columnas disponibles
-            mask = df["DOCPEN"].str.contains(busqueda, na=False) | \
-                   df["CLIENTE"].str.contains(busqueda, case=False, na=False)
+            # 3. Leemos solo la hoja necesaria y solo las columnas necesarias (CLAVE PARA MÓVIL)
+            # Esto evita el desbordamiento de memoria (Error 111)
+            columnas_a_leer = ["DOCPEN", "CLIENTE", "DIAS_ATRASO", "ANALISTA", "BCCTA", "PRODUCTO_CAJA", "AGENCIA", "IMPDESEMB_MN", "SALDO_MN", "DIRECCION_DOM", "ACTIVIDAD_ECON"]
             
-            resultados = df[mask]
+            df = pd.read_excel(xls, sheet_name=hoja_objetivo, usecols=columnas_a_leer, engine="openpyxl")
             
-            if not resultados.empty:
-                st.write(f"Resultados: {len(resultados)}")
-                for idx, fila in resultados.head(5).iterrows():
-                    # Mostramos un botón que guarda toda la fila (el cliente completo)
-                    if st.button(f"Abrir: {fila['CLIENTE']} ({fila['DOCPEN']})", key=f"btn_{idx}"):
-                        st.session_state.cliente_actual = fila.to_dict()
-                        st.session_state.view = "ficha"
-                        st.rerun()
-            else:
-                st.warning("No se encontraron coincidencias.")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+            # 4. Limpieza rápida
+            df.columns = [str(c).strip().upper().replace(" ", "_") for c in df.columns]
+            st.session_state.df = df.astype(str)
+            st.success(f"Hoja '{hoja_objetivo}' cargada con éxito.")
+            
+        except Exception as e:
+            st.error(f"Error técnico: {e}")
 
 def pantalla_ficha():
     c = st.session_state.cliente_actual
