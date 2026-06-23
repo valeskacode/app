@@ -18,17 +18,14 @@ def render_panel_riesgos():
     st.subheader("Criterio para visita a clientes")
     
     categorias = {
-        "Indicio de dolo o fraude en la evaluación de céditos": ["Documentos con enmendaduras", "Documentos con datos inconsistentes", "Documentos sin datos del cliente","Documentos sin firmas o que no coinciden","Documentos duplicados en más de un cliente"],
+        "Indicio de dolo o fraude en la evaluación de créditos": ["Documentos con enmendaduras", "Documentos con datos inconsistentes", "Documentos sin datos del cliente","Documentos sin firmas o que no coinciden","Documentos duplicados en más de un cliente"],
         "Evaluaciones deficientes o con sustento insuficiente": ["No se evidencio sustento de actividad económica", "No se evidencio sustento de ingresos", "No se evidenció sustento de activos representativos","Se omitió al cónyugue"],
         "Créditos reprogramados y refinanciados":["Reprogramado","Refinanciado"],
         "Clientes con créditos con calificación diferente a normal a la fecha de revisión":["Indicar la calificación a la fecha de revisión"]
-    
     }
     
     for cat, items in categorias.items():
-        # Lógica para cambio de color del contenedor
         riesgo_activo = any(st.session_state.get(f"chk_{item.replace(' ', '_')}", False) for item in items)
-        
         bg_color = "#FEF2F2" if riesgo_activo else "#F8FAFC"
         border_color = "#DC2626" if riesgo_activo else "#E2E8F0"
         
@@ -42,113 +39,61 @@ def render_panel_riesgos():
 def pantalla_busqueda():
     st.markdown('<div class="card" style="text-align: center;">', unsafe_allow_html=True)
     st.title("🏦 Buscador de Clientes")
-    
     archivo = st.file_uploader("Cargar Base Excel", type=["xlsx"])
     
     if archivo is not None:
         try:
-            # 1. Leer todas las hojas para depurar
-            xls = pd.ExcelFile(archivo, engine="openpyxl")
-            hojas = xls.sheet_names
-            
-            # 2. Selección automática o manual de hoja
-            nombre_hoja = "MUESTRA_FINAL" if "MUESTRA_FINAL" in hojas else hojas[0]
-            df = pd.read_excel(archivo, sheet_name=nombre_hoja, engine="openpyxl")
-            
-            # 3. Limpieza extrema de columnas (Quita espacios, convierte a mayúsculas)
+            df = pd.read_excel(archivo, sheet_name=0, engine="openpyxl")
             df.columns = [str(c).strip().upper().replace(" ", "_") for c in df.columns]
-            
-            # 4. Buscamos columnas parecidas a DOCPEN y CLIENTE
-            # Esto evita el error si el Excel tiene "DOC PEN" o similar
-            col_dni = next((c for c in df.columns if "DOCPEN" in c or "DNI" in c), None)
-            col_nom = next((c for c in df.columns if "CLIENTE" in c or "NOMBRE" in c), None)
-            
-            if col_dni and col_nom:
-                # Renombramos para estandarizar
-                df = df.rename(columns={col_dni: "DOCPEN", col_nom: "CLIENTE"})
-                st.session_state.df = df[["DOCPEN", "CLIENTE"]].astype(str)
-                st.success(f"Base cargada usando hoja '{nombre_hoja}'")
-            else:
-                st.error("No se detectaron columnas válidas.")
-                st.write("Columnas detectadas:", list(df.columns))
-        
+            st.session_state.df = df.astype(str)
+            st.success("Base cargada correctamente")
         except Exception as e:
-            st.error(f"Error técnico: {e}")
+            st.error(f"Error al cargar: {e}")
 
-    # (El resto del buscador sigue igual...)
     if st.session_state.df is not None:
-        # ... (Tu código de búsqueda que ya tenías)
-
+        busqueda = st.text_input("Buscar por DNI o Nombre")
+        if busqueda:
+            df = st.session_state.df
+            # Filtro corregido para buscar en columnas estandarizadas
+            res = df[df.apply(lambda row: busqueda.lower() in str(row.values).lower(), axis=1)]
+            
+            if not res.empty:
+                st.write(f"Resultados encontrados: {len(res)}")
+                for idx, fila in res.head(5).iterrows():
+                    if st.button(f"Abrir: {fila.get('CLIENTE', 'N/A')}", key=f"btn_{idx}"):
+                        st.session_state.cliente_actual = fila.to_dict()
+                        st.session_state.view = "ficha"
+                        st.rerun()
+            else:
+                st.warning("No se encontraron coincidencias.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def pantalla_ficha():
     c = st.session_state.cliente_actual
+    if not c: return
     
-    # 1. Dashboard de Estado Superior
+    # Dashboard
     atraso = int(c.get("DIAS_ATRASO", 0))
-    # Lógica de color: Verde (<30), Amarillo (31-60), Rojo (>60)
-    color_riesgo = "#10B981" if atraso <= 30 else ("#F59E0B" if atraso <= 60 else "#EF4444")
+    color = "#10B981" if atraso <= 30 else ("#F59E0B" if atraso <= 60 else "#EF4444")
     
-    st.markdown(f"""
-        <div style="background-color:{color_riesgo}; padding:20px; border-radius:15px; color:white; text-align:center;">
-            <h2 style="margin:0;">{c.get("CLIENTE")}</h2>
-            <p style="font-size:1.2rem; margin:5px 0;">DNI: {c.get("DOCPEN")}</p>
-            <div style="font-weight:bold; font-size:1.1rem;">Días de Atraso: {atraso}</div>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color:{color}; padding:20px; border-radius:15px; color:white; text-align:center;"><h2>{c.get("CLIENTE")}</h2><p>DNI: {c.get("DOCPEN")}</p></div>', unsafe_allow_html=True)
     
-    st.write("---") 
-
-    # 2. Expander para detalles técnicos (Cerrado por defecto)
-    with st.expander("ℹ️ Ver detalles técnicos del crédito"):
-        col1, col2 = st.columns(2)
-        col1.write(f"**Analista:** {c.get('ANALISTA')}")
-        col2.write(f"**Cuenta:** {c.get('BCCTA')}")
-        st.write(f"**Producto:** {c.get('PRODUCTO_CAJA')}")
-        st.write(f"**Agencia:** {c.get('AGENCIA')}")
-
-    # 3. Inputs de lectura rápida (Fuentes grandes)
-    st.subheader("Control Financiero")
-    # Usamos valores convertidos a float para evitar errores
-    st.number_input("Importe Desembolsado (S/)", value=float(c.get("IMPDESEMB_MN", 0)), format="%.2f")
-    st.number_input("Saldo Actual (S/)", value=float(c.get("SALDO_MN", 0)), format="%.2f")
-
-    # 4. TABS ÚNICOS (Estructura jerárquica)
     tabs = st.tabs(["📋 Evaluar", "🏠 Domicilio", "💼 Negocio", "💰 Financiero", "📍 GPS", "📸 Fotos", "📄 Reporte"])
     
-    with tabs[0]: # Evaluar
+    with tabs[0]:
         render_panel_riesgos()
-        if st.button("Guardar Evaluación"): 
-            st.success("Evaluación guardada exitosamente")
-            
-    with tabs[1]: # Domicilio
-        st.write(f"**Dirección:** {c.get('DIRECCION_DOM')}")
-        
-    with tabs[2]: # Negocio
-        st.write(f"**Actividad:** {c.get('ACTIVIDAD_ECON')}")
-        
-    with tabs[3]: # Financiero
-        st.metric("Saldo Total", f"S/ {c.get('SALDO_MN', '0')}")
-        
-    with tabs[4]: # GPS
-        st.write("Funcionalidad GPS en desarrollo...")
-        
-    with tabs[5]: # Fotos
-        st.file_uploader("Subir evidencias", accept_multiple_files=True)
-        
-    with tabs[6]: # Reporte
-        if st.button("Generar Informe Word"): 
-            st.info("Generando informe automático...")
+    with tabs[1]:
+        st.write(f"**Dirección:** {c.get('DIRECCION_DOM', 'N/A')}")
+    with tabs[2]:
+        st.write(f"**Negocio:** {c.get('ACTIVIDAD_ECON', 'N/A')}")
+    with tabs[6]:
+        if st.button("Generar Informe Word"): st.info("Generando...")
 
-    # 5. Botón de navegación global (Fuera de los tabs)
-    st.divider()
     if st.button("← Volver a Búsqueda"):
         st.session_state.cliente_actual = None
         st.session_state.view = "busqueda"
         st.rerun()
 
-# --- ROUTER (El final del archivo) ---
-if st.session_state.view == "busqueda": 
-    pantalla_busqueda()
-else: 
-    pantalla_ficha()
-
+# --- ROUTER ÚNICO ---
+if st.session_state.view == "busqueda": pantalla_busqueda()
+else: pantalla_ficha()
