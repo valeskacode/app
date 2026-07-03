@@ -703,8 +703,11 @@ def render_visita(clave, c):
         if st.session_state.get(f"solicitar_gps_{clave}") and not (lat and lon):
             try:
                 from streamlit_js_eval import get_geolocation
-                loc = get_geolocation(key=f"geo_{clave}")
+                # OJO: el parámetro correcto es "component_key", NO "key".
+                loc = get_geolocation(component_key=f"geo_{clave}")
+
                 if loc and "coords" in loc:
+                    # Éxito: el usuario aceptó el permiso y llegaron las coordenadas
                     lat = loc["coords"]["latitude"]
                     lon = loc["coords"]["longitude"]
                     precision = loc["coords"].get("accuracy")
@@ -712,13 +715,37 @@ def render_visita(clave, c):
                     st.session_state[f"lat_{clave}"] = lat
                     st.session_state[f"lon_{clave}"] = lon
                     st.session_state[f"precision_{clave}"] = precision
+                    st.session_state[f"solicitar_gps_{clave}"] = False
 
+                elif loc and "error" in loc:
+                    # El navegador respondió, pero con un error (permiso denegado,
+                    # posición no disponible, timeout, o geolocalización no soportada)
+                    codigo = loc["error"].get("code")
+                    mensaje = loc["error"].get("message", "Error desconocido")
+                    explicacion = {
+                        1: "Permiso de ubicación denegado. Debes permitirlo en la "
+                           "configuración del sitio en tu navegador (icono de "
+                           "candado/ubicación junto a la barra de direcciones).",
+                        2: "La posición no está disponible. Verifica que el GPS del "
+                           "dispositivo esté activado y que tengas señal.",
+                        3: "Se agotó el tiempo de espera al intentar obtener la "
+                           "ubicación. Intenta de nuevo en un lugar con mejor señal.",
+                        0: "Este navegador no soporta geolocalización.",
+                    }.get(codigo, mensaje)
+                    st.warning(f"⚠️ No se pudo obtener la ubicación: {explicacion}")
                     st.session_state[f"solicitar_gps_{clave}"] = False
 
                 else:
+                    # loc es None: el componente todavía no ha respondido (primera
+                    # carga). Streamlit volverá a ejecutar el script automáticamente
+                    # en cuanto el navegador resuelva la promesa de JS.
                     st.info("📡 Obteniendo ubicación del dispositivo... acepta el permiso si el navegador lo solicita.")
-            except Exception:
-                st.warning("⚠️")
+
+            except Exception as e:
+                st.warning(
+                    f"⚠️ Error inesperado al solicitar la ubicación ({e}). "
+                    "Presiona 'Reintentar ubicación' para intentar de nuevo."
+                )
                 st.session_state[f"solicitar_gps_{clave}"] = False
 
         st.markdown("**Ubicación:**")
@@ -735,7 +762,11 @@ def render_visita(clave, c):
         elif st.session_state.get(f"solicitar_gps_{clave}"):
              st.info("📡 Solicitando ubicación del dispositivo...")
         else:
-           st.warning("⚠️")
+           st.warning(
+               "⚠️ No se obtuvo la ubicación GPS. Asegúrate de haber aceptado el permiso "
+               "de ubicación del navegador y que el GPS esté activado, luego presiona "
+               "'Reintentar ubicación'."
+           )
            if st.button("📍 Reintentar ubicación", key=f"retry_gps_{clave}", use_container_width=True):
                st.session_state[f"solicitar_gps_{clave}"] = True
                st.rerun()
