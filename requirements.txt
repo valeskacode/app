@@ -1,5 +1,0 @@
-pandas
-streamlit
-python-docx
-streamlit-js-eval
-openpyxl
