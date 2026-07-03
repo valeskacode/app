@@ -780,7 +780,9 @@ def render_visita(clave, c):
             hay_foto
             and lat is not None
             and lon is not None
-        )        
+        
+        )
+        """
         if st.button(f"💾 Guardar visita de {etiqueta}", key=f"guardar_{clave}",
                      use_container_width=True, type="primary", disabled=not puede_guardar):
             st.session_state.visitas[clave] = {
@@ -793,6 +795,25 @@ def render_visita(clave, c):
             }
             guardar_avance()
             st.success(f"✅ Visita de {etiqueta} guardada — {ahora_v.strftime('%d/%m/%Y %H:%M:%S')} (hora Perú)")
+       """
+        if st.button(f"💾 Guardar visita de {etiqueta}", key=f"guardar_{clave}",
+                     use_container_width=True, type="primary", disabled=not puede_guardar):
+            st.session_state.visitas[clave] = {
+                "direccion": direccion, 
+                "distrito": distrito,        # Asegúrate de incluir esto
+                "provincia": provincia,      # Asegúrate de incluir esto
+                "departamento": departamento,# Asegúrate de incluir esto
+                "referencia": referencia,    # Asegúrate de incluir esto
+                "fecha": ahora_v.strftime("%d/%m/%Y"), 
+                "hora": ahora_v.strftime("%H:%M:%S"),
+                "entrevista_con": entrevista_con, 
+                "comentarios": comentarios,
+                "lat": lat, "lon": lon, "precision": precision,
+                "foto_bytes": foto_final.getvalue() if foto_final is not None else data.get("foto_bytes"),
+            }
+            guardar_avance()
+            st.success(f"Visita de {etiqueta} guardada correctamente.")
+        
         if not puede_guardar:
             st.caption("Se requiere foto y ubicación GPS para guardar la visita")
 
