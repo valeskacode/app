@@ -867,6 +867,9 @@ def generar_pdf(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, ga
             elems.append(tabla_kv([
                 ("Dirección", d.get("direccion", "-")),
                 ("Distrito", d.get("distrito", "-")),
+                ("Provincia", d.get("provincia", "-")),       
+                ("Departamento", d.get("departamento", "-")), 
+                ("Referencia", d.get("referencia", "-")),
                 ("Fecha de visita", d.get("fecha", "-")),
                 ("Hora de visita", d.get("hora", "-")),
                 ("Entrevista con", d.get("entrevista_con", "-")),
