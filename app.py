@@ -971,8 +971,7 @@ def pantalla_reporte():
 def pantalla_consolidado():
     header("📊", "Reporte Consolidado", "Visitas realizadas por agencia y por cliente")
     st.caption(
-        "Se genera a partir de todo lo guardado en el historial (carpeta `data/`, "
-        "o la carpeta de reportes que configures en `utils/helpers.py` → REPORTES_DIR)."
+       ""
     )
 
     resumen_agencia = reporte_consolidado_por_agencia()
