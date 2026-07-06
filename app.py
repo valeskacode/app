@@ -31,7 +31,7 @@ st.set_page_config(
 load_css("assets/style.css")
 
 # --------------------------------------------------------------------------
-# ACCESO — solo cuentas de Microsoft 
+# ACCESO — solo cuentas de Microsoft del tenant de Caja Arequipa
 # --------------------------------------------------------------------------
 TENANT_ID_PERMITIDO = "f3831aea-ec1b-461b-b42f-ca26f9f78551"
 DOMINIO_PERMITIDO = "@cajaarequipa.pe"
@@ -49,7 +49,7 @@ def pantalla_login():
         """<div class="login-wrap">
                 <div class="login-icon">🏦</div>
                 <h1>Visita a Clientes</h1>
-                <p>Auditoría Interna Inicia sesión con tu
+                <p>Auditoría Interna · Caja Arequipa. Inicia sesión con tu
                 cuenta corporativa de Microsoft para continuar.</p>
             </div>""",
         unsafe_allow_html=True,
@@ -59,7 +59,7 @@ def pantalla_login():
                on_click=st.login, args=["microsoft"])
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="login-badge">🔒 Acceso restringido</div>'
+        '<div class="login-badge">🔒 Acceso restringido a personal de Caja Arequipa</div>'
         '<div class="login-footer">Gerencia de Auditoría Interna</div>',
         unsafe_allow_html=True,
     )
@@ -75,7 +75,7 @@ else:
     _tid = st.user.get("tid") or ""
     if not _correo.endswith(DOMINIO_PERMITIDO) and _tid != TENANT_ID_PERMITIDO:
         st.error(
-            "🚫 Acceso restringido. "
+            "🚫 Acceso restringido a personal de Caja Arequipa. "
             "La cuenta con la que iniciaste sesión no pertenece a la organización."
         )
         st.button("Cerrar sesión", on_click=st.logout)
@@ -782,20 +782,23 @@ def render_visita(clave, c):
             and lon is not None
         
         )
-        
         if st.button(f"💾 Guardar visita de {etiqueta}", key=f"guardar_{clave}",
                      use_container_width=True, type="primary", disabled=not puede_guardar):
             st.session_state.visitas[clave] = {
-                "direccion": direccion, "distrito": distrito, "provincia": provincia,
-                "departamento": departamento, "referencia": referencia,
-                "fecha": ahora_v.strftime("%d/%m/%Y"), "hora": ahora_v.strftime("%H:%M:%S"),
-                "entrevista_con": entrevista_con, "comentarios": comentarios,
+                "direccion": direccion, 
+                "distrito": distrito,        # Asegúrate de incluir esto
+                "provincia": provincia,      # Asegúrate de incluir esto
+                "departamento": departamento,# Asegúrate de incluir esto
+                "referencia": referencia,    # Asegúrate de incluir esto
+                "fecha": ahora_v.strftime("%d/%m/%Y"), 
+                "hora": ahora_v.strftime("%H:%M:%S"),
+                "entrevista_con": entrevista_con, 
+                "comentarios": comentarios,
                 "lat": lat, "lon": lon, "precision": precision,
                 "foto_bytes": foto_final.getvalue() if foto_final is not None else data.get("foto_bytes"),
             }
             guardar_avance()
-            st.success(f"✅ Visita de {etiqueta} guardada — {ahora_v.strftime('%d/%m/%Y %H:%M:%S')} (hora Perú)")
-       
+            st.success(f"Visita de {etiqueta} guardada correctamente.")
         
         if not puede_guardar:
             st.caption("Se requiere foto y ubicación GPS para guardar la visita")
@@ -933,8 +936,6 @@ def pantalla_reporte():
             if isinstance(guardado, dict):
                 if guardado.get("online"):
                     st.markdown(f"☁️ **Subido a OneDrive:** [Abrir archivo]({guardado['online']})")
-                elif guardado.get("local"):
-                    st.caption(f"📁 Copia local: `{guardado['local']}`")
                 if guardado.get("error"):
                     st.caption(f"⚠ {guardado['error']}")
 
@@ -971,7 +972,7 @@ def pantalla_reporte():
 def pantalla_consolidado():
     header("📊", "Reporte Consolidado", "Visitas realizadas por agencia y por cliente")
     st.caption(
-       ""
+        ""
     )
 
     resumen_agencia = reporte_consolidado_por_agencia()
