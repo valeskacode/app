@@ -659,33 +659,809 @@ def criterios_seleccionados_lista(criterios, calif_revision):
     return seleccionados
 
 
-# -reporte word
-def generar_word(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, garantias, rcc, usuario, cliente_visitado="", observacion_criterio=""):
-    from docx import Document
+# ---------------------------------------------------------------------------
+# Diseño de la sección "Visita al negocio / laboral / aval / domicilio"
+# (compartido entre Word y PDF) — replica el mockup "III. VISITA AL NEGOCIO"
+# ---------------------------------------------------------------------------
+AZUL_REPORTE = "1B3A5C"
+GRIS_BORDE_REPORTE = "D9DEE6"
+VERDE_REPORTE = "1E7E34"
+VERDE_FONDO_REPORTE = "EAF7EE"
+AMBAR_REPORTE = "B45309"
+AMBAR_FONDO_REPORTE = "FEF6E7"
+ROJO_REPORTE = "C8102E"
+ROJO_FONDO_REPORTE = "FDECEC"
+
+TIPOS_VISITA_INFO = {
+    "negocio":   ("VISITA AL NEGOCIO", "Información del establecimiento"),
+    "laboral":   ("VISITA AL CENTRO LABORAL", "Información del centro laboral"),
+    "aval":      ("VISITA AL AVAL", "Información del lugar visitado"),
+    "domicilio": ("VISITA AL DOMICILIO", "Información del domicilio"),
+}
+
+RESULTADO_VISITA_MAP = {
+    "1": dict(icono="✔", color=VERDE_REPORTE, fondo=VERDE_FONDO_REPORTE,
+              titulo="Cliente con actividad económica vigente",
+              detalle="Se verificó que el negocio se encuentra operando con normalidad."),
+    "2": dict(icono="⚠", color=AMBAR_REPORTE, fondo=AMBAR_FONDO_REPORTE,
+              titulo="Cliente con situación desmejorada",
+              detalle="Se identificaron señales de deterioro en la actividad verificada."),
+    "3": dict(icono="⚠", color=ROJO_REPORTE, fondo=ROJO_FONDO_REPORTE,
+              titulo="Cliente ya no labora / no realiza la actividad económica",
+              detalle="No se pudo verificar actividad económica vigente en el lugar visitado."),
+    "4": dict(icono="✖", color=ROJO_REPORTE, fondo=ROJO_FONDO_REPORTE,
+              titulo="Cliente no ubicado",
+              detalle="No se logró ubicar al cliente en la dirección registrada."),
+}
+
+_CHIP_NUM = {"1": "①", "2": "②", "3": "③", "4": "④"}
+
+
+def _resultado_visita_info(cliente_visitado):
+    """Mapea la opción elegida en 'Cliente visitado' a icono/color/texto."""
+    if not cliente_visitado:
+        return None
+    num = cliente_visitado.strip().split(".")[0].strip()
+    return RESULTADO_VISITA_MAP.get(num)
+
+
+def _direccion_registrada(d):
+    return ", ".join([x for x in [
+        d.get("direccion"), d.get("distrito"), d.get("provincia"), d.get("departamento"),
+    ] if x]) or "-"
+
+
+def _partir_comentarios(comentarios):
+    comentarios = (comentarios or "").strip()
+    if not comentarios:
+        return []
+    partes = [c.strip() for c in comentarios.replace("\r", "").split("\n") if c.strip()]
+    if len(partes) == 1:
+        crudo = partes[0]
+        trozos = [t.strip().rstrip(".") for t in crudo.split(". ") if t.strip()]
+        partes = [t + "." for t in trozos if t]
+    return partes
+
+
+# --------------------------- helpers de bajo nivel (Word) ------------------
+def _docx_shade_cell(cell, hex_color):
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    tcPr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
+    shd.set(qn("w:fill"), hex_color)
+    tcPr.append(shd)
+
+
+def _docx_cell_borders(cell, color=GRIS_BORDE_REPORTE, sz=6):
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    tcPr = cell._tc.get_or_add_tcPr()
+    borders = OxmlElement("w:tcBorders")
+    for edge in ("top", "left", "bottom", "right"):
+        el = OxmlElement(f"w:{edge}")
+        el.set(qn("w:val"), "single")
+        el.set(qn("w:sz"), str(sz))
+        el.set(qn("w:space"), "4")
+        el.set(qn("w:color"), color)
+        borders.append(el)
+    tcPr.append(borders)
+
+
+def _docx_cell_margins(cell, top=120, bottom=120, left=140, right=140):
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    tcPr = cell._tc.get_or_add_tcPr()
+    mar = OxmlElement("w:tcMar")
+    for edge, val in (("top", top), ("bottom", bottom), ("left", left), ("right", right)):
+        el = OxmlElement(f"w:{edge}")
+        el.set(qn("w:w"), str(val))
+        el.set(qn("w:type"), "dxa")
+        mar.append(el)
+    tcPr.append(mar)
+
+
+def _docx_no_table_borders(table):
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    tblPr = table._tbl.tblPr
+    borders = OxmlElement("w:tblBorders")
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        el = OxmlElement(f"w:{edge}")
+        el.set(qn("w:val"), "none")
+        el.set(qn("w:sz"), "0")
+        el.set(qn("w:space"), "0")
+        borders.append(el)
+    tblPr.append(borders)
+
+
+def _docx_clear_cell(cell):
+    cell.text = ""
+    return cell.paragraphs[0]
+
+
+def _docx_card_titulo(cell, numero, texto):
+    from docx.shared import Pt, RGBColor
+    p = cell.add_paragraph()
+    p.paragraph_format.space_after = Pt(8)
+    r1 = p.add_run(_CHIP_NUM.get(str(numero), str(numero)))
+    r1.bold = True
+    r1.font.size = Pt(12)
+    r1.font.color.rgb = RGBColor.from_string(AZUL_REPORTE)
+    r2 = p.add_run("  " + texto)
+    r2.bold = True
+    r2.font.size = Pt(10.5)
+    r2.font.color.rgb = RGBColor.from_string(AZUL_REPORTE)
+    return p
+
+
+def _docx_kv_lines(cell, pairs, label_color="55606E", value_color="1A1A1A"):
+    from docx.shared import Pt, RGBColor
+    for label, value in pairs:
+        p = cell.add_paragraph()
+        p.paragraph_format.space_after = Pt(4)
+        p.paragraph_format.space_before = Pt(0)
+        r1 = p.add_run(f"{label}:  ")
+        r1.bold = True
+        r1.font.size = Pt(9)
+        r1.font.color.rgb = RGBColor.from_string(label_color)
+        r2 = p.add_run(value if value not in (None, "") else "-")
+        r2.font.size = Pt(9)
+        r2.font.color.rgb = RGBColor.from_string(value_color)
+
+
+def _docx_section_banner(doc, numero, titulo):
+    from docx.shared import Pt, RGBColor
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    table = doc.add_table(rows=1, cols=1)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    cell = table.cell(0, 0)
+    _docx_shade_cell(cell, AZUL_REPORTE)
+    _docx_cell_margins(cell, top=140, bottom=140, left=200, right=200)
+    p = _docx_clear_cell(cell)
+    p.paragraph_format.space_after = Pt(0)
+    run = p.add_run(f"{numero}. {titulo}")
+    run.bold = True
+    run.font.size = Pt(13)
+    run.font.color.rgb = RGBColor.from_string("FFFFFF")
+    doc.add_paragraph().paragraph_format.space_after = Pt(2)
+
+
+def _docx_banner_texto(doc, texto_completo):
+    """Igual que _docx_section_banner pero recibe el título ya formateado
+    completo (p. ej. 'I. Datos del cliente y crédito' o '0.1 Observación'),
+    para evitar duplicar puntos en numeraciones tipo '0.1'."""
+    from docx.shared import Pt, RGBColor
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    table = doc.add_table(rows=1, cols=1)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    cell = table.cell(0, 0)
+    _docx_shade_cell(cell, AZUL_REPORTE)
+    _docx_cell_margins(cell, top=140, bottom=140, left=200, right=200)
+    p = _docx_clear_cell(cell)
+    p.paragraph_format.space_after = Pt(0)
+    run = p.add_run(texto_completo)
+    run.bold = True
+    run.font.size = Pt(13)
+    run.font.color.rgb = RGBColor.from_string("FFFFFF")
+    doc.add_paragraph().paragraph_format.space_after = Pt(2)
+
+
+def _docx_abrir_tarjeta(doc):
+    """Crea una tarjeta (tabla de 1 celda con borde) y devuelve la celda lista
+    para recibir contenido — reutilizada por todas las secciones del reporte."""
+    tabla = doc.add_table(rows=1, cols=1)
+    _docx_no_table_borders(tabla)
+    c = tabla.cell(0, 0)
+    _docx_cell_borders(c)
+    _docx_cell_margins(c)
+    _docx_clear_cell(c)
+    return c
+
+
+def _docx_cerrar_tarjeta(doc, space_after=10):
+    from docx.shared import Pt
+    doc.add_paragraph().paragraph_format.space_after = Pt(space_after)
+
+
+def _docx_seccion_kv(doc, titulo, pairs, dos_columnas=True):
+    """Banner + tarjeta(s) de pares clave:valor — para 'Datos del cliente',
+    'Ingresos y gastos' o 'Conformidad'. `titulo` ya debe incluir la numeración
+    (p. ej. 'I. Datos del cliente y crédito')."""
+    _docx_banner_texto(doc, titulo)
+    if dos_columnas and len(pairs) > 4:
+        mitad = (len(pairs) + 1) // 2
+        izquierda, derecha = pairs[:mitad], pairs[mitad:]
+        tabla = doc.add_table(rows=1, cols=2)
+        _docx_no_table_borders(tabla)
+        cl, cr = tabla.cell(0, 0), tabla.cell(0, 1)
+        _docx_cell_borders(cl)
+        _docx_cell_borders(cr)
+        _docx_cell_margins(cl)
+        _docx_cell_margins(cr)
+        _docx_clear_cell(cl)
+        _docx_clear_cell(cr)
+        _docx_kv_lines(cl, izquierda)
+        _docx_kv_lines(cr, derecha)
+    else:
+        c = _docx_abrir_tarjeta(doc)
+        _docx_kv_lines(c, pairs)
+    _docx_cerrar_tarjeta(doc)
+
+
+def _docx_seccion_lista(doc, titulo, items):
+    """Banner + tarjeta con viñetas — para 'Criterio para la visita'."""
+    from docx.shared import Pt, Cm
+    _docx_banner_texto(doc, titulo)
+    c = _docx_abrir_tarjeta(doc)
+    for it in items:
+        p = c.add_paragraph()
+        p.paragraph_format.space_after = Pt(3)
+        p.paragraph_format.left_indent = Cm(0.3)
+        r = p.add_run("•  " + str(it))
+        r.font.size = Pt(9)
+    _docx_cerrar_tarjeta(doc)
+
+
+def _docx_seccion_parrafo(doc, titulo, texto):
+    """Banner + tarjeta con un párrafo de texto libre — para 'Observación'."""
+    from docx.shared import Pt
+    _docx_banner_texto(doc, titulo)
+    c = _docx_abrir_tarjeta(doc)
+    p = c.add_paragraph()
+    r = p.add_run(texto)
+    r.font.size = Pt(9)
+    _docx_cerrar_tarjeta(doc)
+
+
+def _docx_seccion_grupos(doc, titulo, grupos, etiqueta_grupo):
+    """Banner + tarjeta con varios sub-grupos de pares clave:valor — para
+    'Garantías' y 'Deuda RCC', donde puede haber varios registros."""
+    from docx.shared import Pt, RGBColor
+    _docx_banner_texto(doc, titulo)
+    c = _docx_abrir_tarjeta(doc)
+    total = len(grupos)
+    for idx, pairs in enumerate(grupos, start=1):
+        if total > 1:
+            p = c.add_paragraph()
+            p.paragraph_format.space_before = Pt(4) if idx > 1 else Pt(0)
+            p.paragraph_format.space_after = Pt(2)
+            r = p.add_run(f"{etiqueta_grupo} {idx}")
+            r.bold = True
+            r.font.size = Pt(9.5)
+            r.font.color.rgb = RGBColor.from_string(AZUL_REPORTE)
+        _docx_kv_lines(c, pairs)
+    _docx_cerrar_tarjeta(doc)
+
+
+def add_visita_card_docx(doc, numero_seccion, clave, etiqueta, d, cliente_visitado):
+    """Sección con tarjetas al estilo del mockup: banner + 4 tarjetas numeradas
+    (Información del lugar, Resultado de la visita, Observaciones, Evidencia)."""
     from docx.shared import Cm, Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-    AZUL = "1B3A5C"
+    titulo_seccion, titulo_info = TIPOS_VISITA_INFO.get(
+        clave, (etiqueta.upper(), "Información del lugar visitado")
+    )
+    _docx_section_banner(doc, numero_seccion, titulo_seccion)
 
-    def add_heading(doc, text, size=13):
+    if not d:
         p = doc.add_paragraph()
-        run = p.add_run(text)
-        run.bold = True
-        run.font.size = Pt(size)
-        run.font.color.rgb = RGBColor.from_string(AZUL)
-        return p
+        run = p.add_run(f"⚠ No se registró visita de verificación para {etiqueta.lower()}.")
+        run.italic = True
+        run.font.color.rgb = RGBColor.from_string(ROJO_REPORTE)
+        doc.add_paragraph()
+        return
 
-    def add_kv_table(doc, pairs, cols=2):
-        table = doc.add_table(rows=0, cols=cols * 2)
-        table.style = "Light Grid Accent 1"
-        row = None
-        for i, (k, v) in enumerate(pairs):
-            if i % cols == 0:
-                row = table.add_row().cells
-            c = (i % cols) * 2
-            row[c].text = str(k)
-            row[c + 1].text = str(v) if v not in (None, "") else "-"
-        return table
+    resultado = _resultado_visita_info(cliente_visitado) if clave == "negocio" else None
+
+    # Fila 1: Información del lugar  |  Resultado de la visita (solo negocio)
+    cols = 2 if resultado else 1
+    fila1 = doc.add_table(rows=1, cols=cols)
+    _docx_no_table_borders(fila1)
+
+    c_info = fila1.cell(0, 0)
+    _docx_cell_borders(c_info)
+    _docx_cell_margins(c_info)
+    _docx_clear_cell(c_info)
+    _docx_card_titulo(c_info, "1", titulo_info)
+    _docx_kv_lines(c_info, [
+        ("Dirección", d.get("direccion", "-")),
+        ("Distrito", d.get("distrito", "-")),
+        ("Provincia", d.get("provincia", "-")),
+        ("Departamento", d.get("departamento", "-")),
+        ("Referencia", d.get("referencia", "-")),
+    ])
+
+    if resultado:
+        c_res = fila1.cell(0, 1)
+        _docx_cell_borders(c_res)
+        _docx_shade_cell(c_res, resultado["fondo"])
+        _docx_cell_margins(c_res)
+        _docx_clear_cell(c_res)
+        _docx_card_titulo(c_res, "2", "Resultado de la visita")
+
+        p_icon = c_res.add_paragraph()
+        p_icon.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_icon.paragraph_format.space_after = Pt(2)
+        r = p_icon.add_run(resultado["icono"])
+        r.font.size = Pt(26)
+        r.bold = True
+        r.font.color.rgb = RGBColor.from_string(resultado["color"])
+
+        p_lbl = c_res.add_paragraph()
+        p_lbl.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_lbl.paragraph_format.space_after = Pt(2)
+        r = p_lbl.add_run("Cliente visitado")
+        r.font.size = Pt(9)
+        r.font.color.rgb = RGBColor.from_string("55606E")
+
+        p_tit = c_res.add_paragraph()
+        p_tit.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_tit.paragraph_format.space_after = Pt(6)
+        r = p_tit.add_run(resultado["titulo"])
+        r.bold = True
+        r.font.size = Pt(11)
+        r.font.color.rgb = RGBColor.from_string(resultado["color"])
+
+        p_det = c_res.add_paragraph()
+        p_det.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_det.paragraph_format.space_after = Pt(0)
+        r = p_det.add_run(resultado["detalle"])
+        r.font.size = Pt(8.5)
+        r.italic = True
+        r.font.color.rgb = RGBColor.from_string("444444")
+
+    doc.add_paragraph().paragraph_format.space_after = Pt(2)
+
+    # Fila 2: Observaciones del auditor
+    numero_obs = "2" if not resultado else "3"
+    tabla_obs = doc.add_table(rows=1, cols=1)
+    _docx_no_table_borders(tabla_obs)
+    c_obs = tabla_obs.cell(0, 0)
+    _docx_cell_borders(c_obs)
+    _docx_cell_margins(c_obs)
+    _docx_clear_cell(c_obs)
+    _docx_card_titulo(c_obs, numero_obs, "Observaciones del auditor")
+
+    p = c_obs.add_paragraph()
+    p.paragraph_format.space_after = Pt(6)
+    r1 = p.add_run("Entrevista realizada con:  ")
+    r1.bold = True
+    r1.font.size = Pt(9)
+    r1.font.color.rgb = RGBColor.from_string("55606E")
+    r2 = p.add_run(d.get("entrevista_con") or "-")
+    r2.font.size = Pt(9)
+
+    p2 = c_obs.add_paragraph()
+    p2.paragraph_format.space_after = Pt(3)
+    r = p2.add_run("Comentarios:")
+    r.bold = True
+    r.font.size = Pt(9)
+    r.font.color.rgb = RGBColor.from_string("55606E")
+
+    partes = _partir_comentarios(d.get("comentarios"))
+    if partes:
+        for parte in partes:
+            pp = c_obs.add_paragraph()
+            pp.paragraph_format.space_after = Pt(3)
+            pp.paragraph_format.left_indent = Cm(0.3)
+            r = pp.add_run("•  " + parte)
+            r.font.size = Pt(9)
+    else:
+        pp = c_obs.add_paragraph()
+        r = pp.add_run("Sin comentarios registrados.")
+        r.italic = True
+        r.font.size = Pt(9)
+        r.font.color.rgb = RGBColor.from_string("888888")
+
+    doc.add_paragraph().paragraph_format.space_after = Pt(2)
+
+    # Fila 3: Evidencia de verificación (foto | geolocalización)
+    numero_evid = "3" if not resultado else "4"
+    fila3 = doc.add_table(rows=1, cols=2)
+    _docx_no_table_borders(fila3)
+
+    c_foto = fila3.cell(0, 0)
+    _docx_cell_borders(c_foto)
+    _docx_cell_margins(c_foto)
+    _docx_clear_cell(c_foto)
+    _docx_card_titulo(c_foto, numero_evid, "Evidencia de verificación")
+    p = c_foto.add_paragraph()
+    p.paragraph_format.space_after = Pt(6)
+    r = p.add_run("Fotografía tomada en la visita")
+    r.bold = True
+    r.font.size = Pt(9)
+    r.font.color.rgb = RGBColor.from_string("55606E")
+
+    if d.get("foto_bytes"):
+        try:
+            foto_stream = io.BytesIO(d["foto_bytes"])
+            img = Image.open(foto_stream)
+            buffer_limpio = io.BytesIO()
+            img.convert("RGB").save(buffer_limpio, format="PNG")
+            buffer_limpio.seek(0)
+            c_foto.add_paragraph().add_run().add_picture(buffer_limpio, width=Cm(7.2))
+        except Exception as e:
+            pp = c_foto.add_paragraph()
+            r = pp.add_run("⚠ Error al procesar la imagen de la visita.")
+            r.italic = True
+            r.font.size = Pt(9)
+            print(f"Error técnico al insertar imagen: {e}")
+    else:
+        pp = c_foto.add_paragraph()
+        r = pp.add_run("Sin fotografía registrada.")
+        r.italic = True
+        r.font.size = Pt(9)
+        r.font.color.rgb = RGBColor.from_string("888888")
+
+    c_geo = fila3.cell(0, 1)
+    _docx_cell_borders(c_geo)
+    _docx_cell_margins(c_geo)
+    _docx_clear_cell(c_geo)
+    p = c_geo.add_paragraph()
+    p.paragraph_format.space_after = Pt(6)
+    r = p.add_run("Datos de geolocalización")
+    r.bold = True
+    r.font.size = Pt(9)
+    r.font.color.rgb = RGBColor.from_string("55606E")
+
+    lat, lon = d.get("lat"), d.get("lon")
+    coords_txt = f"{lat:.6f}, {lon:.6f}" if lat and lon else "No capturada"
+    _docx_kv_lines(c_geo, [
+        ("Coordenadas GPS", coords_txt),
+        ("Fecha de captura", d.get("fecha", "-")),
+        ("Hora de captura", d.get("hora", "-")),
+        ("Dirección registrada", _direccion_registrada(d)),
+    ])
+
+    if lat and lon:
+        p_link = c_geo.add_paragraph()
+        p_link.paragraph_format.space_before = Pt(4)
+        r = p_link.add_run(f"Ver en Google Maps: https://maps.google.com/?q={lat},{lon}")
+        r.font.size = Pt(8)
+        r.italic = True
+        r.font.color.rgb = RGBColor.from_string("1A5FB4")
+
+    doc.add_paragraph().paragraph_format.space_after = Pt(2)
+
+    # Nota final
+    p_nota = doc.add_paragraph()
+    p_nota.paragraph_format.space_before = Pt(2)
+    p_nota.paragraph_format.space_after = Pt(10)
+    r = p_nota.add_run(
+        "Nota: La información incluida en esta sección ha sido registrada durante la "
+        "visita de verificación y constituye evidencia de la evaluación realizada."
+    )
+    r.italic = True
+    r.font.size = Pt(8)
+    r.font.color.rgb = RGBColor.from_string("777777")
+
+
+# --------------------------- helpers de bajo nivel (PDF) --------------------
+_PDF_FUENTES_REGISTRADAS = False
+
+
+def _pdf_registrar_fuentes():
+    """Registra DejaVu Sans (soporta ✔ ⚠ ① etc.) una sola vez por proceso."""
+    global _PDF_FUENTES_REGISTRADAS
+    if _PDF_FUENTES_REGISTRADAS:
+        return
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    base = "/usr/share/fonts/truetype/dejavu/"
+    try:
+        pdfmetrics.registerFont(TTFont("DejaVuSans", base + "DejaVuSans.ttf"))
+        pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", base + "DejaVuSans-Bold.ttf"))
+        pdfmetrics.registerFont(TTFont("DejaVuSans-Oblique", base + "DejaVuSans-Oblique.ttf"))
+    except Exception:
+        pass
+    _PDF_FUENTES_REGISTRADAS = True
+
+
+def _pdf_estilos_visita():
+    from reportlab.lib import colors as _colors
+    from reportlab.lib.styles import ParagraphStyle
+    azul = _colors.HexColor("#" + AZUL_REPORTE)
+    gris_txt = _colors.HexColor("#55606E")
+    return {
+        "card_title": ParagraphStyle("cardtitle", fontName="DejaVuSans-Bold", fontSize=10.5,
+                                      textColor=azul, spaceAfter=6),
+        "label": ParagraphStyle("label", fontName="DejaVuSans", fontSize=9,
+                                 textColor=_colors.HexColor("#1A1A1A"), leading=13),
+        "result_lbl": ParagraphStyle("resultlbl", fontName="DejaVuSans", fontSize=9,
+                                      textColor=gris_txt, alignment=1, spaceAfter=2),
+        "result_titulo": ParagraphStyle("resulttit", fontName="DejaVuSans-Bold", fontSize=11,
+                                         alignment=1, spaceAfter=6, leading=14),
+        "result_det": ParagraphStyle("resultdet", fontName="DejaVuSans-Oblique", fontSize=8.5,
+                                      textColor=_colors.HexColor("#444444"), alignment=1, leading=11),
+        "icon_big": ParagraphStyle("iconbig", fontName="DejaVuSans-Bold", fontSize=28, alignment=1),
+        "sub": ParagraphStyle("sub", fontName="DejaVuSans-Bold", fontSize=9,
+                               textColor=gris_txt, spaceAfter=4),
+        "bullet": ParagraphStyle("bullet", fontName="DejaVuSans", fontSize=9, leftIndent=10,
+                                  leading=12.5, spaceAfter=3),
+        "italic_muted": ParagraphStyle("italicmuted", fontName="DejaVuSans-Oblique", fontSize=9,
+                                        textColor=_colors.HexColor("#888888")),
+        "link": ParagraphStyle("link", fontName="DejaVuSans-Oblique", fontSize=8,
+                                textColor=_colors.HexColor("#1A5FB4")),
+        "nota": ParagraphStyle("nota", fontName="DejaVuSans-Oblique", fontSize=8,
+                                textColor=_colors.HexColor("#777777"), leading=11),
+        "banner": ParagraphStyle("banner", fontName="DejaVuSans-Bold", fontSize=12.5,
+                                  textColor=_colors.white, leading=15),
+        "warn_missing": ParagraphStyle("warnmissing", fontName="DejaVuSans-Oblique", fontSize=9.5,
+                                        textColor=_colors.HexColor("#" + ROJO_REPORTE)),
+        "grupo_titulo": ParagraphStyle("grupotitulo", fontName="DejaVuSans-Bold", fontSize=9.5,
+                                        textColor=azul, spaceAfter=4),
+    }
+
+
+def _pdf_banner(numero, titulo, ancho):
+    """Barra azul de encabezado, ancho completo — reutilizada por todas las secciones."""
+    from reportlab.lib import colors as _colors
+    from reportlab.platypus import Paragraph, Table, TableStyle
+    est = _pdf_estilos_visita()
+    banner = Table([[Paragraph(f"{numero}. {titulo}", est["banner"])]], colWidths=[ancho])
+    banner.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), _colors.HexColor("#" + AZUL_REPORTE)),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+    ]))
+    return banner
+
+
+def _pdf_card_wrap(flowables, col_width, fondo=None, borde=None):
+    """Tarjeta con borde/relleno — reutilizada por todas las secciones."""
+    from reportlab.lib import colors as _colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import Table, TableStyle
+    if fondo is None:
+        fondo = _colors.white
+    if borde is None:
+        borde = _colors.HexColor("#" + GRIS_BORDE_REPORTE)
+    inner = Table([[flowables]], colWidths=[col_width - 0.5 * cm])
+    inner.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), fondo),
+        ("BOX", (0, 0), (-1, -1), 0.75, borde),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    return inner
+
+
+def _pdf_banner_texto(texto_completo, ancho):
+    """Igual que _pdf_banner pero recibe el título ya formateado completo
+    (p. ej. 'I. Datos del cliente y crédito' o '0.1 Observación'), para evitar
+    duplicar puntos en numeraciones tipo '0.1'."""
+    from reportlab.lib import colors as _colors
+    from reportlab.platypus import Paragraph, Table, TableStyle
+    est = _pdf_estilos_visita()
+    banner = Table([[Paragraph(texto_completo, est["banner"])]], colWidths=[ancho])
+    banner.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), _colors.HexColor("#" + AZUL_REPORTE)),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+    ]))
+    return banner
+
+
+def _pdf_kv_paragraphs(pairs, est):
+    from reportlab.platypus import Paragraph
+    return [Paragraph(f"<b>{lbl}:</b>  {val if val not in (None, '') else '-'}", est["label"])
+            for lbl, val in pairs]
+
+
+def _pdf_seccion_kv(titulo, ancho, pairs, dos_columnas=True):
+    """Banner + tarjeta(s) de pares clave:valor — para secciones tipo 'Datos del
+    cliente', 'Ingresos y gastos' o 'Conformidad'. `titulo` ya debe incluir la
+    numeración (p. ej. 'I. Datos del cliente y crédito')."""
+    from reportlab.platypus import Spacer, Table, TableStyle
+    _pdf_registrar_fuentes()
+    est = _pdf_estilos_visita()
+    elems = [_pdf_banner_texto(titulo, ancho), Spacer(1, 8)]
+    if dos_columnas and len(pairs) > 4:
+        mitad = (len(pairs) + 1) // 2
+        izquierda, derecha = pairs[:mitad], pairs[mitad:]
+        col_w = ancho / 2
+        fila = Table([[_pdf_card_wrap(_pdf_kv_paragraphs(izquierda, est), col_w),
+                       _pdf_card_wrap(_pdf_kv_paragraphs(derecha, est), col_w)]],
+                     colWidths=[col_w, col_w])
+        fila.setStyle(TableStyle([
+            ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        elems.append(fila)
+    else:
+        elems.append(_pdf_card_wrap(_pdf_kv_paragraphs(pairs, est), ancho))
+    elems.append(Spacer(1, 12))
+    return elems
+
+
+def _pdf_seccion_lista(titulo, ancho, items):
+    """Banner + tarjeta con viñetas — para 'Criterio para la visita'."""
+    from reportlab.platypus import Paragraph, Spacer
+    _pdf_registrar_fuentes()
+    est = _pdf_estilos_visita()
+    contenido = [Paragraph("•  " + str(it), est["bullet"]) for it in items]
+    return [_pdf_banner_texto(titulo, ancho), Spacer(1, 8),
+            _pdf_card_wrap(contenido, ancho), Spacer(1, 12)]
+
+
+def _pdf_seccion_parrafo(titulo, ancho, texto):
+    """Banner + tarjeta con un párrafo de texto libre — para 'Observación'."""
+    from reportlab.platypus import Paragraph, Spacer
+    _pdf_registrar_fuentes()
+    est = _pdf_estilos_visita()
+    return [_pdf_banner_texto(titulo, ancho), Spacer(1, 8),
+            _pdf_card_wrap([Paragraph(texto, est["label"])], ancho), Spacer(1, 12)]
+
+
+def _pdf_seccion_grupos(titulo, ancho, grupos, etiqueta_grupo):
+    """Banner + tarjeta con varios sub-grupos de pares clave:valor — para
+    'Garantías' y 'Deuda RCC', donde puede haber varios registros."""
+    from reportlab.platypus import Paragraph, Spacer
+    _pdf_registrar_fuentes()
+    est = _pdf_estilos_visita()
+    contenido = []
+    total = len(grupos)
+    for idx, pairs in enumerate(grupos, start=1):
+        if total > 1:
+            contenido.append(Paragraph(f"{etiqueta_grupo} {idx}", est["grupo_titulo"]))
+        contenido += _pdf_kv_paragraphs(pairs, est)
+        if idx < total:
+            contenido.append(Spacer(1, 6))
+    return [_pdf_banner_texto(titulo, ancho), Spacer(1, 8),
+            _pdf_card_wrap(contenido, ancho), Spacer(1, 12)]
+
+
+def build_visita_section_pdf(numero_seccion, clave, etiqueta, d, cliente_visitado, ancho_total):
+    """Devuelve la lista de flowables reportlab para una sección de visita,
+    con el mismo diseño de tarjetas que la versión Word."""
+    from reportlab.lib import colors as _colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, Image as RLImage
+
+    _pdf_registrar_fuentes()
+    est = _pdf_estilos_visita()
+
+    def kv_paragraphs(pairs):
+        return _pdf_kv_paragraphs(pairs, est)
+
+    def card_wrap(flowables, col_width, fondo=_colors.white, borde=_colors.HexColor("#" + GRIS_BORDE_REPORTE)):
+        return _pdf_card_wrap(flowables, col_width, fondo=fondo, borde=borde)
+
+    titulo_seccion, titulo_info = TIPOS_VISITA_INFO.get(
+        clave, (etiqueta.upper(), "Información del lugar visitado")
+    )
+
+    elems = [_pdf_banner(numero_seccion, titulo_seccion, ancho_total), Spacer(1, 8)]
+
+    if not d:
+        elems.append(Paragraph(
+            f"⚠ No se registró visita de verificación para {etiqueta.lower()}.", est["warn_missing"]))
+        elems.append(Spacer(1, 10))
+        return elems
+
+    resultado = _resultado_visita_info(cliente_visitado) if clave == "negocio" else None
+
+    if resultado:
+        col_w = ancho_total / 2
+        info_flow = [Paragraph(f"①  {titulo_info}", est["card_title"])]
+        info_flow += kv_paragraphs([
+            ("Dirección", d.get("direccion", "-")),
+            ("Distrito", d.get("distrito", "-")),
+            ("Provincia", d.get("provincia", "-")),
+            ("Departamento", d.get("departamento", "-")),
+            ("Referencia", d.get("referencia", "-")),
+        ])
+        res_color = _colors.HexColor("#" + resultado["color"])
+        res_flow = [
+            Paragraph("②  Resultado de la visita", est["card_title"]),
+            Paragraph(resultado["icono"], ParagraphStyle_iconc(est, res_color)),
+            Paragraph("Cliente visitado", est["result_lbl"]),
+            Paragraph(resultado["titulo"], ParagraphStyle_titc(est, res_color)),
+            Paragraph(resultado["detalle"], est["result_det"]),
+        ]
+        fila1 = Table([[card_wrap(info_flow, col_w),
+                         card_wrap(res_flow, col_w, fondo=_colors.HexColor("#" + resultado["fondo"]))]],
+                       colWidths=[col_w, col_w])
+        fila1.setStyle(TableStyle([
+            ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        elems.append(fila1)
+        num_obs, num_evid = "③", "④"
+    else:
+        info_flow = [Paragraph(f"①  {titulo_info}", est["card_title"])]
+        info_flow += kv_paragraphs([
+            ("Dirección", d.get("direccion", "-")),
+            ("Distrito", d.get("distrito", "-")),
+            ("Provincia", d.get("provincia", "-")),
+            ("Departamento", d.get("departamento", "-")),
+            ("Referencia", d.get("referencia", "-")),
+        ])
+        elems.append(card_wrap(info_flow, ancho_total))
+        num_obs, num_evid = "②", "③"
+
+    elems.append(Spacer(1, 8))
+
+    obs_flow = [Paragraph(f"{num_obs}  Observaciones del auditor", est["card_title"]),
+                Paragraph(f"<b>Entrevista realizada con:</b>  {d.get('entrevista_con') or '-'}", est["label"]),
+                Spacer(1, 4), Paragraph("Comentarios:", est["sub"])]
+    partes = _partir_comentarios(d.get("comentarios"))
+    if partes:
+        for parte in partes:
+            obs_flow.append(Paragraph("•  " + parte, est["bullet"]))
+    else:
+        obs_flow.append(Paragraph("Sin comentarios registrados.", est["italic_muted"]))
+    elems.append(card_wrap(obs_flow, ancho_total))
+    elems.append(Spacer(1, 8))
+
+    col_w = ancho_total / 2
+    foto_flow = [Paragraph(f"{num_evid}  Evidencia de verificación", est["card_title"]),
+                 Paragraph("Fotografía tomada en la visita", est["sub"])]
+    if d.get("foto_bytes"):
+        try:
+            img = RLImage(io.BytesIO(d["foto_bytes"]), width=col_w - 1.2 * cm,
+                          height=(col_w - 1.2 * cm) * 0.72)
+            foto_flow.append(img)
+        except Exception:
+            foto_flow.append(Paragraph("⚠ Error al procesar la imagen de la visita.", est["italic_muted"]))
+    else:
+        foto_flow.append(Paragraph("Sin fotografía registrada.", est["italic_muted"]))
+
+    lat, lon = d.get("lat"), d.get("lon")
+    coords_txt = f"{lat:.6f}, {lon:.6f}" if lat and lon else "No capturada"
+    geo_flow = [Paragraph("Datos de geolocalización", est["sub"])]
+    geo_flow += kv_paragraphs([
+        ("Coordenadas GPS", coords_txt),
+        ("Fecha de captura", d.get("fecha", "-")),
+        ("Hora de captura", d.get("hora", "-")),
+        ("Dirección registrada", _direccion_registrada(d)),
+    ])
+    if lat and lon:
+        geo_flow.append(Spacer(1, 3))
+        geo_flow.append(Paragraph(
+            f"Ver en Google Maps: https://maps.google.com/?q={lat},{lon}", est["link"]))
+
+    fila3 = Table([[card_wrap(foto_flow, col_w), card_wrap(geo_flow, col_w)]],
+                   colWidths=[col_w, col_w])
+    fila3.setStyle(TableStyle([
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    elems.append(fila3)
+    elems.append(Spacer(1, 6))
+    elems.append(Paragraph(
+        "Nota: La información incluida en esta sección ha sido registrada durante la visita de "
+        "verificación y constituye evidencia de la evaluación realizada.", est["nota"]))
+    elems.append(Spacer(1, 12))
+    return elems
+
+
+def ParagraphStyle_iconc(est, color):
+    from reportlab.lib.styles import ParagraphStyle
+    return ParagraphStyle("iconc", parent=est["icon_big"], textColor=color)
+
+
+def ParagraphStyle_titc(est, color):
+    from reportlab.lib.styles import ParagraphStyle
+    return ParagraphStyle("titc", parent=est["result_titulo"], textColor=color)
+
+
+# -reporte word
+def generar_word(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, garantias, rcc, usuario, cliente_visitado="", observacion_criterio=""):
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
 
     doc = Document()
     doc.add_heading("VISITA A CLIENTES", level=0)
@@ -694,15 +1470,11 @@ def generar_word(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, g
     doc.add_paragraph(f"Auditor: {usuario}  ·  Fecha de visita: {ahora_peru().strftime('%d/%m/%Y %H:%M')} (hora Perú)")
 
     if criterios_txt:
-        add_heading(doc, "0. Criterio para la visita")
-        for c in criterios_txt:
-            doc.add_paragraph("• " + c)
+        _docx_seccion_lista(doc, "0. Criterio para la visita", criterios_txt)
     if observacion_criterio:
-        add_heading(doc, "0.1 Observación")
-        doc.add_paragraph(observacion_criterio)
+        _docx_seccion_parrafo(doc, "0.1 Observación", observacion_criterio)
 
-    add_heading(doc, "I. Datos del cliente y crédito")
-    add_kv_table(doc, [
+    _docx_seccion_kv(doc, "I. Datos del cliente y crédito", [
         ("Agencia", safe_str(cliente.get("AGENCIA"))),
         ("DNI/LE Titular", safe_str(cliente.get("DOCPEN"))),
         ("Titular", safe_str(cliente.get("CLIENTE"))),
@@ -722,8 +1494,7 @@ def generar_word(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, g
         ("Resultado de la visita / Cliente visitado", cliente_visitado or "-"),
     ])
 
-    add_heading(doc, "II. Ingresos y gastos")
-    add_kv_table(doc, [
+    _docx_seccion_kv(doc, "II. Ingresos y gastos", [
         ("Ingreso principal", fmt_money(ingresos_raw.get("ingreso_principal"))),
         ("Otros ingresos", fmt_money(ingresos_raw.get("otros_ingresos"))),
         ("Total ingresos", fmt_money(ingresos_calc["total_ingresos"])),
@@ -734,56 +1505,23 @@ def generar_word(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, g
         ("Margen", f"{ingresos_calc['margen']:.1f}%"),
     ])
 
-    for clave, titulo in [("negocio", "III. Visita al negocio (dirección del negocio)"),
-                           ("laboral", "IV. Visita al centro laboral"),
-                           ("aval", "V. Visita al aval"),
-                           ("domicilio", "VI. Visita al domicilio")]:
+    for clave, numero, etiqueta in [("negocio", "III", "Negocio"),
+                                     ("laboral", "IV", "Laboral"),
+                                     ("aval", "V", "Aval"),
+                                     ("domicilio", "VI", "Domicilio")]:
         d = visitas.get(clave)
-        add_heading(doc, titulo)
-        if d:
-            add_kv_table(doc, [
-                ("Dirección", d.get("direccion", "-")),
-                ("Distrito", d.get("distrito", "-")),
-                ("Provincia", d.get("provincia", "-")),
-                ("Departamento", d.get("departamento", "-")),
-                ("Referencia", d.get("referencia", "-")),
-                ("Fecha de visita", d.get("fecha", "-")),
-                ("Hora de visita", d.get("hora", "-")),
-                ("Entrevista con", d.get("entrevista_con", "-")),
-                ("Comentarios", d.get("comentarios", "-")),
-                ("GPS", f"{d.get('lat')}, {d.get('lon')}" if d.get("lat") else "No capturada"),
-            ])
-            if d.get("foto_bytes"):
-                
-                try:
-                    foto_stream = io.BytesIO(d["foto_bytes"])
-                    img = Image.open(foto_stream)
-                    buffer_limpio = io.BytesIO()
-                    img.save(buffer_limpio, format='PNG')
-                    buffer_limpio.seek(0)
-                    doc.add_picture(buffer_limpio, width=Cm(8))
-                
-                except Exception as e:
-                    doc.add_paragraph("⚠ Error al procesar la imagen de la visita.")
-                    print(f"Error técnico al insertar imagen: {e}")
-        else:
-            doc.add_paragraph("⚠ No se registró visita de verificación para esta sección.")
+        add_visita_card_docx(doc, numero, clave, etiqueta, d, cliente_visitado)
 
     if garantias:
-        add_heading(doc, "VI. Garantías")
-        for g in garantias:
-            add_kv_table(doc, list(g.items()))
+        _docx_seccion_grupos(doc, "VII. Garantías", [list(g.items()) for g in garantias], "Garantía")
 
     if rcc:
-        add_heading(doc, "VII. Deuda RCC")
-        for r in rcc:
-            add_kv_table(doc, list(r.items()))
+        _docx_seccion_grupos(doc, "VIII. Deuda RCC", [list(r.items()) for r in rcc], "Deuda")
 
-    add_heading(doc, "Conformidad")
-    add_kv_table(doc, [
+    _docx_seccion_kv(doc, "IX. Conformidad", [
         ("Hecho por (Auditor)", usuario), ("Fecha", ahora_peru().strftime("%d/%m/%Y")),
         ("Revisado por", ""), ("Fecha", ""),
-    ])
+    ], dos_columnas=False)
 
     buf = io.BytesIO()
     doc.save(buf)
@@ -796,20 +1534,18 @@ def generar_pdf(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, ga
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import cm
     from reportlab.lib import colors
-    from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage,
-    )
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-    AZUL = colors.HexColor("#1B3A5C")
-    ROJO = colors.HexColor("#C8102E")
+    _pdf_registrar_fuentes()
+    AZUL = colors.HexColor("#" + AZUL_REPORTE)
 
     buf = io.BytesIO()
     docpdf = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
     styles = getSampleStyleSheet()
-    h1 = ParagraphStyle("h1c", parent=styles["Heading1"], textColor=AZUL, fontSize=15)
-    h2 = ParagraphStyle("h2c", parent=styles["Heading2"], textColor=AZUL, fontSize=12, spaceBefore=10)
-    normal = styles["Normal"]
+    h1 = ParagraphStyle("h1c", parent=styles["Heading1"], textColor=AZUL, fontSize=15,
+                         fontName="DejaVuSans-Bold")
+    normal = ParagraphStyle("normalc", parent=styles["Normal"], fontName="DejaVuSans")
 
     elems = [
         Paragraph("VISITA A CLIENTES", h1),
@@ -818,28 +1554,14 @@ def generar_pdf(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, ga
         Spacer(1, 10),
     ]
 
-    def tabla_kv(pairs):
-        data = [[k, str(v) if v not in (None, "") else "-"] for k, v in pairs]
-        t = Table(data, colWidths=[6 * cm, 9 * cm])
-        t.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f0f3")),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc")),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
-        ]))
-        return t
+    ancho_contenido = docpdf.width
 
     if criterios_txt:
-        elems.append(Paragraph("0. Criterio para la visita", h2))
-        for c in criterios_txt:
-            elems.append(Paragraph("• " + c, normal))
+        elems.extend(_pdf_seccion_lista("0. Criterio para la visita", ancho_contenido, criterios_txt))
     if observacion_criterio:
-        elems.append(Paragraph("0.1 Observación", h2))
-        elems.append(Paragraph(observacion_criterio, normal))
+        elems.extend(_pdf_seccion_parrafo("0.1 Observación", ancho_contenido, observacion_criterio))
 
-    elems.append(Paragraph("I. Datos del cliente y crédito", h2))
-    elems.append(tabla_kv([
+    elems.extend(_pdf_seccion_kv("I. Datos del cliente y crédito", ancho_contenido, [
         ("Agencia", safe_str(cliente.get("AGENCIA"))),
         ("DNI/LE Titular", safe_str(cliente.get("DOCPEN"))),
         ("Titular", safe_str(cliente.get("CLIENTE"))),
@@ -852,55 +1574,44 @@ def generar_pdf(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, ga
         ("Importe", fmt_money(cliente.get("IMPDESEMB_MN"))),
         ("Saldo capital", fmt_money(cliente.get("SALDO_MN"))),
         ("Tipo de crédito", safe_str(cliente.get("PRODUCTO_CAJA"))),
+        ("Tipo SBS", safe_str(cliente.get("TIPO_SBS"))),
         ("Calificación", safe_str(cliente.get("CATEG_RESULTANTE"))),
+        ("Rubro", safe_str(cliente.get("ACTIVIDAD_ECON"))),
+        ("Último pago", safe_str(cliente.get("FECHA_UTLPAGO"))),
         ("Resultado de la visita / Cliente visitado", cliente_visitado or "-"),
     ]))
 
-   
-    for i,(clave, titulo) in enumerate([("negocio", "II. Visita al negocio (dirección del negocio)"),
-                           ("laboral", "III. Visita al centro laboral"),
-                           ("aval", "IV. Visita al aval"),
-                           ("domicilio", "V. Visita al domicilio")], start=2):
+    elems.extend(_pdf_seccion_kv("II. Ingresos y gastos", ancho_contenido, [
+        ("Ingreso principal", fmt_money(ingresos_raw.get("ingreso_principal"))),
+        ("Otros ingresos", fmt_money(ingresos_raw.get("otros_ingresos"))),
+        ("Total ingresos", fmt_money(ingresos_calc["total_ingresos"])),
+        ("Gastos operativos", fmt_money(ingresos_calc["gastos_operativos"])),
+        ("Gastos familiares", fmt_money(ingresos_calc["gastos_familiares"])),
+        ("Total gastos", fmt_money(ingresos_calc["total_gastos"])),
+        ("Utilidad neta", fmt_money(ingresos_calc["utilidad_neta"])),
+        ("Margen", f"{ingresos_calc['margen']:.1f}%"),
+    ]))
+
+    for clave, numero, etiqueta in [("negocio", "III", "Negocio"),
+                                     ("laboral", "IV", "Laboral"),
+                                     ("aval", "V", "Aval"),
+                                     ("domicilio", "VI", "Domicilio")]:
         d = visitas.get(clave)
-        elems.append(Paragraph(titulo, h2))
-        if d:
-            elems.append(tabla_kv([
-                ("Dirección", d.get("direccion", "-")),
-                ("Distrito", d.get("distrito", "-")),
-                ("Provincia", d.get("provincia", "-")),       
-                ("Departamento", d.get("departamento", "-")), 
-                ("Referencia", d.get("referencia", "-")),
-                ("Fecha de visita", d.get("fecha", "-")),
-                ("Hora de visita", d.get("hora", "-")),
-                ("Entrevista con", d.get("entrevista_con", "-")),
-                ("Comentarios", d.get("comentarios", "-")),
-                ("GPS", f"{d.get('lat')}, {d.get('lon')}" if d.get("lat") else "No capturada"),
-            ]))
-            if d.get("foto_bytes"):
-                try:
-                    img = RLImage(io.BytesIO(d["foto_bytes"]), width=8 * cm, height=6 * cm)
-                    elems.append(img)
-                except Exception:
-                    pass
-        else:
-            elems.append(Paragraph("No se registró visita de verificación para esta sección.", normal))
-        elems.append(Spacer(1, 6))
+        elems.extend(build_visita_section_pdf(numero, clave, etiqueta, d, cliente_visitado, ancho_contenido))
 
     if garantias:
-        elems.append(Paragraph("VI. Garantías", h2))
-        for g in garantias:
-            elems.append(tabla_kv(list(g.items())))
+        elems.extend(_pdf_seccion_grupos("VII. Garantías", ancho_contenido,
+                                          [list(g.items()) for g in garantias], "Garantía"))
 
     if rcc:
-        elems.append(Paragraph("VII. Deuda RCC", h2))
-        for r in rcc:
-            elems.append(tabla_kv(list(r.items())))
+        elems.extend(_pdf_seccion_grupos("VIII. Deuda RCC", ancho_contenido,
+                                          [list(r.items()) for r in rcc], "Deuda"))
 
-    elems.append(Paragraph("Conformidad", h2))
-    elems.append(tabla_kv([
-        ("Hecho por (Auditor)", usuario),
-        ("Fecha", ahora_peru().strftime("%d/%m/%Y")),
-    ]))
+    elems.extend(_pdf_seccion_kv("IX. Conformidad", ancho_contenido, [
+        ("Hecho por (Auditor)", usuario), ("Fecha", ahora_peru().strftime("%d/%m/%Y")),
+        ("Revisado por", ""), ("Fecha", ""),
+    ], dos_columnas=False))
+
     docpdf.build(elems)
     buf.seek(0)
     return buf
