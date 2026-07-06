@@ -31,7 +31,7 @@ st.set_page_config(
 load_css("assets/style.css")
 
 # --------------------------------------------------------------------------
-# ACCESO — solo cuentas de Microsoft del tenant de Caja Arequipa
+# ACCESO — solo cuentas de Microsoft 
 # --------------------------------------------------------------------------
 TENANT_ID_PERMITIDO = "f3831aea-ec1b-461b-b42f-ca26f9f78551"
 DOMINIO_PERMITIDO = "@cajaarequipa.pe"
@@ -49,7 +49,7 @@ def pantalla_login():
         """<div class="login-wrap">
                 <div class="login-icon">🏦</div>
                 <h1>Visita a Clientes</h1>
-                <p>Auditoría Interna · Caja Arequipa. Inicia sesión con tu
+                <p>Auditoría Interna Inicia sesión con tu
                 cuenta corporativa de Microsoft para continuar.</p>
             </div>""",
         unsafe_allow_html=True,
@@ -59,7 +59,7 @@ def pantalla_login():
                on_click=st.login, args=["microsoft"])
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="login-badge">🔒 Acceso restringido a personal de Caja Arequipa</div>'
+        '<div class="login-badge">🔒 Acceso restringido</div>'
         '<div class="login-footer">Gerencia de Auditoría Interna</div>',
         unsafe_allow_html=True,
     )
@@ -75,7 +75,7 @@ else:
     _tid = st.user.get("tid") or ""
     if not _correo.endswith(DOMINIO_PERMITIDO) and _tid != TENANT_ID_PERMITIDO:
         st.error(
-            "🚫 Acceso restringido a personal de Caja Arequipa. "
+            "🚫 Acceso restringido. "
             "La cuenta con la que iniciaste sesión no pertenece a la organización."
         )
         st.button("Cerrar sesión", on_click=st.logout)
