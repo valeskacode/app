@@ -1550,7 +1550,7 @@ def generar_word(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, g
         ("Resultado de la visita / Cliente visitado", cliente_visitado or "-"),
     ])
 
-    _docx_seccion_kv(doc, "II. Ingresos y gastos", [
+   """ _docx_seccion_kv(doc, "II. Ingresos y gastos", [
         ("Ingreso principal", fmt_money(ingresos_raw.get("ingreso_principal"))),
         ("Otros ingresos", fmt_money(ingresos_raw.get("otros_ingresos"))),
         ("Total ingresos", fmt_money(ingresos_calc["total_ingresos"])),
@@ -1559,7 +1559,7 @@ def generar_word(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, g
         ("Total gastos", fmt_money(ingresos_calc["total_gastos"])),
         ("Utilidad neta", fmt_money(ingresos_calc["utilidad_neta"])),
         ("Margen", f"{ingresos_calc['margen']:.1f}%"),
-    ])
+    ])"""
 
     for clave, numero, etiqueta in [("negocio", "III", "Negocio"),
                                      ("laboral", "IV", "Laboral"),
