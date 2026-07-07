@@ -772,3 +772,16 @@ def mostrar_dashboard_reporte(df_historial: pd.DataFrame):
                     df_historial=df_historial,
                     agencia=agencia,
                     fecha_desde=fecha_desde,
+                    fecha_hasta=fecha_hasta,
+                    analista=analista,
+                    resultado=resultado,
+                    auditor_responsable=st.session_state.get("usuario", "Usuario"),
+                )
+                
+                st.download_button(
+                    label="📥 Descargar",
+                    data=excel_bytes,
+                    file_name=f"reporte_consolidado_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                )
