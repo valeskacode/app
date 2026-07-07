@@ -696,6 +696,16 @@ RESULTADO_VISITA_MAP = {
 
 _CHIP_NUM = {"1": "①", "2": "②", "3": "③", "4": "④"}
 
+# Numeración romana dinámica de secciones del reporte (Word y PDF).
+# Permite que "Criterio para la visita" empiece en I y que las secciones de
+# visita (Negocio/Laboral/Aval/Domicilio) que no tengan datos simplemente no
+# aparezcan, sin dejar huecos en la numeración.
+_ROMANOS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
+
+
+def _romano(n):
+    return _ROMANOS[n - 1] if 1 <= n <= len(_ROMANOS) else str(n)
+
 
 def _resultado_visita_info(cliente_visitado):
     """Mapea la opción elegida en 'Cliente visitado' a icono/color/texto."""
@@ -945,15 +955,12 @@ def add_visita_card_docx(doc, numero_seccion, clave, etiqueta, d, cliente_visita
     titulo_seccion, titulo_info = TIPOS_VISITA_INFO.get(
         clave, (etiqueta.upper(), "Información del lugar visitado")
     )
-    _docx_section_banner(doc, numero_seccion, titulo_seccion)
-
     if not d:
-        p = doc.add_paragraph()
-        run = p.add_run(f"⚠ No se registró visita de verificación para {etiqueta.lower()}.")
-        run.italic = True
-        run.font.color.rgb = RGBColor.from_string(ROJO_REPORTE)
-        doc.add_paragraph()
+        # Si no se registró información para esta visita, se omite la sección
+        # por completo (no se muestra banner ni advertencia).
         return
+
+    _docx_section_banner(doc, numero_seccion, titulo_seccion)
 
     resultado = _resultado_visita_info(cliente_visitado) if clave == "negocio" else None
 
@@ -1397,13 +1404,12 @@ def build_visita_section_pdf(numero_seccion, clave, etiqueta, d, cliente_visitad
         clave, (etiqueta.upper(), "Información del lugar visitado")
     )
 
-    elems = [_pdf_banner(numero_seccion, titulo_seccion, ancho_total), Spacer(1, 8)]
-
     if not d:
-        elems.append(Paragraph(
-            f"⚠ No se registró visita de verificación para {etiqueta.lower()}.", est["warn_missing"]))
-        elems.append(Spacer(1, 10))
-        return elems
+        # Si no se registró información para esta visita, se omite la sección
+        # por completo (no se muestra banner ni advertencia).
+        return []
+
+    elems = [_pdf_banner(numero_seccion, titulo_seccion, ancho_total), Spacer(1, 8)]
 
     resultado = _resultado_visita_info(cliente_visitado) if clave == "negocio" else None
 
@@ -1525,12 +1531,18 @@ def generar_word(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, g
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     doc.add_paragraph(f"Auditor: {usuario}  ·  Fecha de visita: {ahora_peru().strftime('%d/%m/%Y %H:%M')} (hora Perú)")
 
-    if criterios_txt:
-        _docx_seccion_lista(doc, "0. Criterio para la visita", criterios_txt)
-    if observacion_criterio:
-        _docx_seccion_parrafo(doc, "0.1 Observación", observacion_criterio)
+    numero = 1
 
-    _docx_seccion_kv(doc, "I. Datos del cliente y crédito", [
+    if criterios_txt:
+        _docx_seccion_lista(doc, f"{_romano(numero)}. Criterio para la visita", criterios_txt)
+        if observacion_criterio:
+            _docx_seccion_parrafo(doc, f"{_romano(numero)}.1 Observación", observacion_criterio)
+        numero += 1
+    elif observacion_criterio:
+        _docx_seccion_parrafo(doc, f"{_romano(numero)}. Observación", observacion_criterio)
+        numero += 1
+
+    _docx_seccion_kv(doc, f"{_romano(numero)}. Datos del cliente y crédito", [
         ("Agencia", safe_str(cliente.get("AGENCIA"))),
         ("DNI/LE Titular", safe_str(cliente.get("DOCPEN"))),
         ("Titular", safe_str(cliente.get("CLIENTE"))),
@@ -1549,34 +1561,28 @@ def generar_word(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, g
         ("Último pago", safe_str(cliente.get("FECHA_UTLPAGO"))),
         ("Resultado de la visita / Cliente visitado", cliente_visitado or "-"),
     ])
+    numero += 1
 
-    _docx_seccion_kv(doc, "II. Ingresos y gastos", [
-        ("Ingreso principal", fmt_money(ingresos_raw.get("ingreso_principal"))),
-        ("Otros ingresos", fmt_money(ingresos_raw.get("otros_ingresos"))),
-        ("Total ingresos", fmt_money(ingresos_calc["total_ingresos"])),
-        ("Gastos operativos", fmt_money(ingresos_calc["gastos_operativos"])),
-        ("Gastos familiares", fmt_money(ingresos_calc["gastos_familiares"])),
-        ("Total gastos", fmt_money(ingresos_calc["total_gastos"])),
-        ("Utilidad neta", fmt_money(ingresos_calc["utilidad_neta"])),
-        ("Margen", f"{ingresos_calc['margen']:.1f}%"),
-    ])
-
-    for clave, numero, etiqueta in [("negocio", "III", "Negocio"),
-                                     ("laboral", "IV", "Laboral"),
-                                     ("aval", "V", "Aval"),
-                                     ("domicilio", "VI", "Domicilio")]:
+    for clave, etiqueta in [("negocio", "Negocio"),
+                             ("laboral", "Laboral"),
+                             ("aval", "Aval"),
+                             ("domicilio", "Domicilio")]:
         d = visitas.get(clave)
-        add_visita_card_docx(doc, numero, clave, etiqueta, d, cliente_visitado)
+        if not d:
+            continue  # solo se incluyen las visitas con información registrada
+        add_visita_card_docx(doc, _romano(numero), clave, etiqueta, d, cliente_visitado)
+        numero += 1
 
     if garantias:
-        _docx_seccion_grupos(doc, "VII. Garantías", [list(g.items()) for g in garantias], "Garantía")
+        _docx_seccion_grupos(doc, f"{_romano(numero)}. Garantías", [list(g.items()) for g in garantias], "Garantía")
+        numero += 1
 
     if rcc:
-        _docx_seccion_grupos(doc, "VIII. Deuda RCC", [list(r.items()) for r in rcc], "Deuda")
+        _docx_seccion_grupos(doc, f"{_romano(numero)}. Deuda RCC", [list(r.items()) for r in rcc], "Deuda")
+        numero += 1
 
-    _docx_seccion_kv(doc, "IX. Conformidad", [
+    _docx_seccion_kv(doc, f"{_romano(numero)}. Conformidad", [
         ("Hecho por (Auditor)", usuario), ("Fecha", ahora_peru().strftime("%d/%m/%Y")),
-        ("Revisado por", ""), ("Fecha", ""),
     ], dos_columnas=False)
 
     buf = io.BytesIO()
@@ -1612,12 +1618,18 @@ def generar_pdf(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, ga
 
     ancho_contenido = docpdf.width
 
-    if criterios_txt:
-        elems.extend(_pdf_seccion_lista("0. Criterio para la visita", ancho_contenido, criterios_txt))
-    if observacion_criterio:
-        elems.extend(_pdf_seccion_parrafo("0.1 Observación", ancho_contenido, observacion_criterio))
+    numero = 1
 
-    elems.extend(_pdf_seccion_kv("I. Datos del cliente y crédito", ancho_contenido, [
+    if criterios_txt:
+        elems.extend(_pdf_seccion_lista(f"{_romano(numero)}. Criterio para la visita", ancho_contenido, criterios_txt))
+        if observacion_criterio:
+            elems.extend(_pdf_seccion_parrafo(f"{_romano(numero)}.1 Observación", ancho_contenido, observacion_criterio))
+        numero += 1
+    elif observacion_criterio:
+        elems.extend(_pdf_seccion_parrafo(f"{_romano(numero)}. Observación", ancho_contenido, observacion_criterio))
+        numero += 1
+
+    elems.extend(_pdf_seccion_kv(f"{_romano(numero)}. Datos del cliente y crédito", ancho_contenido, [
         ("Agencia", safe_str(cliente.get("AGENCIA"))),
         ("DNI/LE Titular", safe_str(cliente.get("DOCPEN"))),
         ("Titular", safe_str(cliente.get("CLIENTE"))),
@@ -1636,36 +1648,30 @@ def generar_pdf(cliente, criterios_txt, ingresos_calc, ingresos_raw, visitas, ga
         ("Último pago", safe_str(cliente.get("FECHA_UTLPAGO"))),
         ("Resultado de la visita / Cliente visitado", cliente_visitado or "-"),
     ]))
+    numero += 1
 
-    elems.extend(_pdf_seccion_kv("II. Ingresos y gastos", ancho_contenido, [
-        ("Ingreso principal", fmt_money(ingresos_raw.get("ingreso_principal"))),
-        ("Otros ingresos", fmt_money(ingresos_raw.get("otros_ingresos"))),
-        ("Total ingresos", fmt_money(ingresos_calc["total_ingresos"])),
-        ("Gastos operativos", fmt_money(ingresos_calc["gastos_operativos"])),
-        ("Gastos familiares", fmt_money(ingresos_calc["gastos_familiares"])),
-        ("Total gastos", fmt_money(ingresos_calc["total_gastos"])),
-        ("Utilidad neta", fmt_money(ingresos_calc["utilidad_neta"])),
-        ("Margen", f"{ingresos_calc['margen']:.1f}%"),
-    ]))
-
-    for clave, numero, etiqueta in [("negocio", "III", "Negocio"),
-                                     ("laboral", "IV", "Laboral"),
-                                     ("aval", "V", "Aval"),
-                                     ("domicilio", "VI", "Domicilio")]:
+    for clave, etiqueta in [("negocio", "Negocio"),
+                             ("laboral", "Laboral"),
+                             ("aval", "Aval"),
+                             ("domicilio", "Domicilio")]:
         d = visitas.get(clave)
-        elems.extend(build_visita_section_pdf(numero, clave, etiqueta, d, cliente_visitado, ancho_contenido))
+        if not d:
+            continue  # solo se incluyen las visitas con información registrada
+        elems.extend(build_visita_section_pdf(_romano(numero), clave, etiqueta, d, cliente_visitado, ancho_contenido))
+        numero += 1
 
     if garantias:
-        elems.extend(_pdf_seccion_grupos("VII. Garantías", ancho_contenido,
+        elems.extend(_pdf_seccion_grupos(f"{_romano(numero)}. Garantías", ancho_contenido,
                                           [list(g.items()) for g in garantias], "Garantía"))
+        numero += 1
 
     if rcc:
-        elems.extend(_pdf_seccion_grupos("VIII. Deuda RCC", ancho_contenido,
+        elems.extend(_pdf_seccion_grupos(f"{_romano(numero)}. Deuda RCC", ancho_contenido,
                                           [list(r.items()) for r in rcc], "Deuda"))
+        numero += 1
 
-    elems.extend(_pdf_seccion_kv("IX. Conformidad", ancho_contenido, [
+    elems.extend(_pdf_seccion_kv(f"{_romano(numero)}. Conformidad", ancho_contenido, [
         ("Hecho por (Auditor)", usuario), ("Fecha", ahora_peru().strftime("%d/%m/%Y")),
-        ("Revisado por", ""), ("Fecha", ""),
     ], dos_columnas=False))
 
     docpdf.build(elems)
