@@ -1145,19 +1145,75 @@ _PDF_FUENTES_REGISTRADAS = False
 
 
 def _pdf_registrar_fuentes():
-    """Registra DejaVu Sans (soporta ✔ ⚠ ① etc.) una sola vez por proceso."""
+    """Registra DejaVu Sans (soporta ✔ ⚠ ① etc.) una sola vez por proceso.
+
+    Si las fuentes TTF no están disponibles en el entorno (por ejemplo,
+    porque cambió la ruta del sistema o el paquete de fuentes no está
+    instalado), se registran alias "DejaVuSans" / "DejaVuSans-Bold" /
+    "DejaVuSans-Oblique" apuntando a las fuentes estándar de ReportLab
+    (Helvetica). Así el resto del código, que referencia esos nombres de
+    fuente en sus ParagraphStyle, sigue funcionando en vez de fallar con
+    "Can't map determine family/bold/italic for ...".
+    """
     global _PDF_FUENTES_REGISTRADAS
     if _PDF_FUENTES_REGISTRADAS:
         return
+    import copy
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    base = "/usr/share/fonts/truetype/dejavu/"
-    try:
-        pdfmetrics.registerFont(TTFont("DejaVuSans", base + "DejaVuSans.ttf"))
-        pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", base + "DejaVuSans-Bold.ttf"))
-        pdfmetrics.registerFont(TTFont("DejaVuSans-Oblique", base + "DejaVuSans-Oblique.ttf"))
-    except Exception:
-        pass
+
+    posibles_bases = [
+        "/usr/share/fonts/truetype/dejavu/",
+        "/usr/share/fonts/dejavu/",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "fonts") + os.sep,
+    ]
+    archivos = {
+        "DejaVuSans": "DejaVuSans.ttf",
+        "DejaVuSans-Bold": "DejaVuSans-Bold.ttf",
+        "DejaVuSans-Oblique": "DejaVuSans-Oblique.ttf",
+    }
+
+    registradas_ok = False
+    for base in posibles_bases:
+        try:
+            if all(os.path.isfile(base + archivo) for archivo in archivos.values()):
+                for nombre, archivo in archivos.items():
+                    pdfmetrics.registerFont(TTFont(nombre, base + archivo))
+                registradas_ok = True
+                break
+        except Exception:
+            continue
+
+    if not registradas_ok:
+        # Fallback: alias sobre fuentes estándar (no soportan ✔ ⚠ ① pero
+        # evitan que la generación de PDF se caiga por completo).
+        equivalentes = {
+            "DejaVuSans": "Helvetica",
+            "DejaVuSans-Bold": "Helvetica-Bold",
+            "DejaVuSans-Oblique": "Helvetica-Oblique",
+        }
+        for alias, estandar in equivalentes.items():
+            try:
+                fuente_clon = copy.copy(pdfmetrics.getFont(estandar))
+                fuente_clon.fontName = alias
+                pdfmetrics.registerFont(fuente_clon)
+            except Exception:
+                pass
+        try:
+            # Los alias base14 no activan automáticamente el mapeo bold/italic
+            # que usa el parser de Paragraph (a diferencia de TTFont, que sí lo
+            # hace). Lo registramos explícitamente para que estilos con
+            # fontName="DejaVuSans-Bold"/"DejaVuSans-Oblique" resuelvan bien.
+            pdfmetrics.registerFontFamily(
+                "DejaVuSans",
+                normal="DejaVuSans",
+                bold="DejaVuSans-Bold",
+                italic="DejaVuSans-Oblique",
+                boldItalic="DejaVuSans-Bold",
+            )
+        except Exception:
+            pass
+
     _PDF_FUENTES_REGISTRADAS = True
 
 
