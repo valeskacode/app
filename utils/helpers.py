@@ -162,8 +162,7 @@ def slug(texto):
 
 
 # --------------------------------------------------------------------------
-# 📌 NUEVO — HELPERS PARA LA TARJETA "Cliente encontrado" Y LA LISTA DE
-# "Clientes similares" de la pantalla de Búsqueda (igualando el mockup).
+#  HELPERS PARA LA TARJETA 
 # --------------------------------------------------------------------------
 def solo_digitos(texto):
     """Deja solo los dígitos de un texto. Útil para comparar DNIs aunque
