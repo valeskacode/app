@@ -55,8 +55,6 @@ _token_cache: dict = {}
 
 
 def _obtener_token() -> str:
-    """Obtiene (o reutiliza en caché) un token de acceso de Graph API
-    usando el flujo Client Credentials (sin login del usuario)."""
     import time
     ahora = time.time()
     if _token_cache.get("expires_at", 0) > ahora + 60:
@@ -75,6 +73,21 @@ def _obtener_token() -> str:
     _token_cache["expires_at"] = ahora + data.get("expires_in", 3600)
     return _token_cache["access_token"]
 
+def probar_token():
+    url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
+
+    resp = requests.post(
+        url,
+        data={
+            "grant_type": "client_credentials",
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "scope": "https://graph.microsoft.com/.default",
+        },
+    )
+
+    print("STATUS:", resp.status_code)
+    print("BODY:", resp.text)  
 
 def _headers() -> dict:
     return {"Authorization": f"Bearer {_obtener_token()}"}
