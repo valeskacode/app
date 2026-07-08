@@ -38,7 +38,15 @@ TENANT_ID     = _secret("tenant_id")
 
 ONEDRIVE_USER = _secret("onedrive_user")
 
-ONEDRIVE_CARPETA = _secret("onedrive_carpeta", "Mis archivos/visita_prueba")
+# IMPORTANTE: con el permiso "Files.ReadWrite.AppFolder" (Aplicación), la app
+# SOLO puede leer/escribir dentro de su propia carpeta especial en el OneDrive
+# del usuario (Graph la crea sola en "Apps/<Nombre del App Registration>").
+# No se puede usar cualquier ruta bajo /drive/root:/... como antes (eso
+# requeriría Files.ReadWrite.All). Por eso ONEDRIVE_CARPETA ahora es una
+# subcarpeta OPCIONAL dentro de esa carpeta de la app (no una ruta libre en
+# el OneDrive). Puede dejarse vacío para guardar directo en la raíz de la
+# carpeta de la app.
+ONEDRIVE_CARPETA = _secret("onedrive_carpeta", "")
 
 ONEDRIVE_BASE_SHARE_URL = _secret(
     "base_share_url",
@@ -110,9 +118,11 @@ def _ruta_onedrive(nombre_archivo: str, subcarpeta: str = "") -> str:
 
 
 def _upload_url(ruta_en_onedrive: str) -> str:
-    """URL de Graph API para subir un archivo por ruta."""
+    """URL de Graph API para subir un archivo por ruta, dentro de la carpeta
+    especial de la app (approot), que es lo único accesible con el permiso
+    de Aplicación 'Files.ReadWrite.AppFolder'."""
     ruta_enc = requests.utils.quote(ruta_en_onedrive, safe="/")
-    return f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive/root:/{ruta_enc}:/content"
+    return f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive/special/approot:/{ruta_enc}:/content"
 
 
 def subir_archivo(nombre_archivo: str, contenido_bytes: bytes,
@@ -173,9 +183,12 @@ def listar_carpeta(subcarpeta: str = "") -> list[dict]:
     try:
         base = ONEDRIVE_CARPETA.strip("/")
         if subcarpeta:
-            base = f"{base}/{subcarpeta.strip('/')}"
-        ruta_enc = requests.utils.quote(base, safe="/")
-        url = f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive/root:/{ruta_enc}:/children"
+            base = f"{base}/{subcarpeta.strip('/')}" if base else subcarpeta.strip("/")
+        if base:
+            ruta_enc = requests.utils.quote(base, safe="/")
+            url = f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive/special/approot:/{ruta_enc}:/children"
+        else:
+            url = f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive/special/approot/children"
         resp = requests.get(url, headers=_headers(), timeout=15)
         resp.raise_for_status()
         items = resp.json().get("value", [])
@@ -198,28 +211,26 @@ def test_conexion() -> tuple[bool, str]:
         return False, "Falta configurar CLIENT_ID, CLIENT_SECRET, TENANT_ID o ONEDRIVE_USER."
     try:
         _obtener_token()
-        url  = f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive"
+        # Probamos directamente la carpeta especial de la app (approot), que
+        # es lo que realmente cubre el permiso de Aplicación
+        # 'Files.ReadWrite.AppFolder'. Probar /drive a secas puede fallar
+        # aunque el permiso esté bien configurado, porque ese endpoint
+        # genérico no está dentro del alcance de AppFolder.
+        url = f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive/special/approot"
         resp = requests.get(url, headers=_headers(), timeout=10)
-        """resp.raise_for_status()
-        nombre = resp.json().get("owner", {}).get("user", {}).get("displayName", ONEDRIVE_USER)"""
-        return False, (
-        f"URL: {url}\n\n"
-        f"STATUS: {resp.status_code}\n\n"
-        f"BODY: {resp.text}"
-        )
-        
-        return False, f"Diagnóstico: HTTP {resp.status_code}"
-
-       # return True, f"Conectado correctamente al OneDrive de: {nombre}"
+        resp.raise_for_status()
+        web_url = resp.json().get("webUrl", "")
+        return True, f"Conectado correctamente a la carpeta de la app: {web_url}"
     except requests.HTTPError as e:
         codigo = e.response.status_code if e.response else "?"
         if codigo == 401:
             return False, ("Error 401 — Credenciales incorrectas, secreto vencido, "
                             "o falta otorgar consentimiento administrativo en Azure.")
         if codigo == 403:
-            return False, ("Error 403 — La app no tiene permiso 'Files.ReadWrite.All' de tipo "
-                            "**Aplicación** en Azure (si está como 'Delegado' no funciona con "
-                            "este flujo), o falta el consentimiento administrativo.")
+            return False, ("Error 403 — La app no tiene permiso 'Files.ReadWrite.AppFolder' de "
+                            "tipo **Aplicación** en Azure con consentimiento administrativo "
+                            "otorgado (si está como 'Delegado' no funciona con este flujo de "
+                            "client credentials).")
         if codigo == 404:
             return False, f"Error 404 — El usuario '{ONEDRIVE_USER}' no se encontró en este tenant."
         return False, f"Error HTTP {codigo}: {e}"
@@ -237,8 +248,11 @@ def carpeta_weburl(subcarpeta: str = "") -> str:
         base = ONEDRIVE_CARPETA.strip("/")
         if subcarpeta:
             base = f"{base}/{subcarpeta.strip('/')}" if base else subcarpeta.strip("/")
-        ruta_enc = requests.utils.quote(base, safe="/")
-        url = f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive/root:/{ruta_enc}"
+        if base:
+            ruta_enc = requests.utils.quote(base, safe="/")
+            url = f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive/special/approot:/{ruta_enc}"
+        else:
+            url = f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive/special/approot"
         resp = requests.get(url, headers=_headers(), timeout=10)
         resp.raise_for_status()
         return resp.json().get("webUrl", "")
@@ -269,10 +283,13 @@ def _detalle_error_http(e: "requests.HTTPError") -> str:
                 f"client_secret no esté vencido y que client_id/tenant_id sean "
                 f"correctos. Detalle de Graph: {cuerpo}")
     if codigo == 403:
-        return (f"Error 403 (permiso insuficiente) — falta el permiso de tipo "
-                f"Aplicación (no Delegado) 'Files.ReadWrite.All' (o 'Sites.Read.All' "
-                f"para carpetas compartidas de SharePoint) con consentimiento "
-                f"administrativo otorgado en Azure AD. Detalle de Graph: {cuerpo}")
+        return (f"Error 403 (permiso insuficiente) — si esto ocurre al leer/guardar en la "
+                f"carpeta de la app, revisa que 'Files.ReadWrite.AppFolder' esté como permiso "
+                f"de **Aplicación** (no Delegado) y con consentimiento administrativo otorgado "
+                f"en Azure AD. Si ocurre al acceder a una carpeta compartida fuera de la carpeta "
+                f"de la app (por ejemplo la base de clientes), 'Files.ReadWrite.AppFolder' NO "
+                f"alcanza para eso — se necesitaría además 'Files.Read.All' o 'Sites.Read.All' "
+                f"de tipo Aplicación. Detalle de Graph: {cuerpo}")
     if codigo == 404:
         return f"Error 404 — no se encontró el recurso. Detalle de Graph: {cuerpo}"
     return f"Error HTTP {codigo}. Detalle de Graph: {cuerpo or e}"
@@ -335,18 +352,20 @@ def diagnostico_graph(url_compartida: str = "") -> list[dict]:
                        "detalle": f"Falló aquí mismo: revisa client_id/client_secret/tenant_id. {e}"})
         return pasos  # sin token no tiene caso seguir
 
-    # 2) Drive del usuario
+    # 2) Carpeta especial de la app (approot) — lo que cubre el permiso
+    #    de Aplicación 'Files.ReadWrite.AppFolder'.
     try:
-        resp = requests.get(f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive",
+        resp = requests.get(f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive/special/approot",
                              headers=_headers(), timeout=10)
         resp.raise_for_status()
-        pasos.append({"paso": f"2. Acceder al drive de {ONEDRIVE_USER}", "ok": True, "detalle": ""})
+        pasos.append({"paso": f"2. Acceder a la carpeta de la app en el OneDrive de {ONEDRIVE_USER}",
+                       "ok": True, "detalle": resp.json().get("webUrl", "")})
     except requests.HTTPError as e:
-        pasos.append({"paso": f"2. Acceder al drive de {ONEDRIVE_USER}", "ok": False,
-                       "detalle": _detalle_error_http(e)})
+        pasos.append({"paso": f"2. Acceder a la carpeta de la app en el OneDrive de {ONEDRIVE_USER}",
+                       "ok": False, "detalle": _detalle_error_http(e)})
     except Exception as e:
-        pasos.append({"paso": f"2. Acceder al drive de {ONEDRIVE_USER}", "ok": False,
-                       "detalle": f"Error de conexión: {e}"})
+        pasos.append({"paso": f"2. Acceder a la carpeta de la app en el OneDrive de {ONEDRIVE_USER}",
+                       "ok": False, "detalle": f"Error de conexión: {e}"})
 
     # 3) Link compartido (solo si se pasó uno)
     if url_compartida:
