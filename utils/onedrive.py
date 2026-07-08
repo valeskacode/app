@@ -42,8 +42,9 @@ ONEDRIVE_CARPETA = _secret("onedrive_carpeta", "Mis archivos/visita_prueba")
 
 ONEDRIVE_BASE_SHARE_URL = _secret(
     "base_share_url",
-    """https://cajaarequipape-my.sharepoint.com/:f:/g/personal/vherrera_cajaarequipa_pe/"
-    "IgDFL8eh0Jv9TY56xnomN8DgASKbGXNZRG1OF15eSzXgVj0?e=WSdtmm"""
+    "https://cajaarequipape-my.sharepoint.com/:f:/g/personal/"
+    "vherrera_cajaarequipa_pe/"
+    "IgDFL8eh0Jv9TY56xnomN8DgASKbGXNZRG1OF15eSzXgVj0?e=WSdtmm"
 )
 
 # URL base de Graph API
