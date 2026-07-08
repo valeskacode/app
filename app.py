@@ -228,8 +228,18 @@ def pantalla_busqueda():
             from utils.onedrive import (
                 credenciales_configuradas as _od_ok,
                 descargar_excel_base, ONEDRIVE_BASE_SHARE_URL,
+                diagnostico_graph,
             )
             if _od_ok():
+                with st.expander("🔧 Diagnóstico de conexión OneDrive/Graph"):
+                    if st.button("Ejecutar diagnóstico", key="btn_diag_graph"):
+                        with st.spinner("Probando conexión con Microsoft Graph..."):
+                            pasos = diagnostico_graph(ONEDRIVE_BASE_SHARE_URL)
+                        for p in pasos:
+                            if p["ok"]:
+                                st.success(f"✅ {p['paso']}")
+                            else:
+                                st.error(f"❌ {p['paso']}\n\n{p['detalle']}")
                 st.markdown("**☁️ Recomendado en celular**")
                 if st.button("📥 Cargar base desde OneDrive", use_container_width=True,
                              type="primary", key="btn_cargar_onedrive"):
