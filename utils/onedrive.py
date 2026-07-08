@@ -173,6 +173,8 @@ def subir_archivo(nombre_archivo: str, contenido_bytes: bytes,
         resp.raise_for_status()
         web_url = resp.json().get("webUrl", "")
         return True, web_url
+    except requests.HTTPError as e:
+        return False, _detalle_error_http(e)
     except Exception as e:
         return False, str(e)
 
@@ -217,7 +219,7 @@ def listar_carpeta(subcarpeta: str = "") -> list[dict]:
                 "fecha": i.get("lastModifiedDateTime", "")[:10],
                 "webUrl": i.get("webUrl", ""),
             }
-            for i in items if not i.get("folder")  # solo archivos, no carpetas
+            for i in items if not i.get("folder")
         ]
     except Exception:
         return []
@@ -284,11 +286,39 @@ def _encode_share_url(url: str) -> str:
     return "u!" + b64
 
 
-def listar_archivos_share(url_compartida: str) -> list[dict]:
+def _detalle_error_http(e: "requests.HTTPError") -> str:
+    """Traduce un HTTPError de Graph a un mensaje entendible, distinguiendo
+    401 (token/credenciales rechazadas) de 403 (permiso insuficiente/falta
+    consentimiento) en vez de esconder el motivo real."""
+    codigo = e.response.status_code if e.response is not None else "?"
+    cuerpo = ""
+    try:
+        cuerpo = e.response.json().get("error", {}).get("message", "")
+    except Exception:
+        pass
+    if codigo == 401:
+        return (f"Error 401 (no autorizado) — el token fue rechazado. Revisa que "
+                f"client_secret no esté vencido y que client_id/tenant_id sean "
+                f"correctos. Detalle de Graph: {cuerpo}")
+    if codigo == 403:
+        return (f"Error 403 (permiso insuficiente) — falta el permiso de tipo "
+                f"Aplicación (no Delegado) 'Files.ReadWrite.All' (o 'Sites.Read.All' "
+                f"para carpetas compartidas de SharePoint) con consentimiento "
+                f"administrativo otorgado en Azure AD. Detalle de Graph: {cuerpo}")
+    if codigo == 404:
+        return f"Error 404 — no se encontró el recurso. Detalle de Graph: {cuerpo}"
+    return f"Error HTTP {codigo}. Detalle de Graph: {cuerpo or e}"
+
+
+def listar_archivos_share(url_compartida: str) -> tuple[list[dict], str]:
     """Lista los archivos dentro de una carpeta compartida de OneDrive/SharePoint
-    a partir de su link de 'Compartir' (los que empiezan con .../:f:/...)."""
+    a partir de su link de 'Compartir' (los que empiezan con .../:f:/...).
+
+    Retorna (lista_de_items, error). Si error != "", lista_de_items estará
+    vacía y error explicará el motivo real (antes se escondía como "no hay
+    archivos" incluso cuando en realidad Graph devolvía 401/403)."""
     if not credenciales_configuradas():
-        return []
+        return [], "Credenciales de Graph API no configuradas."
     try:
         share_id = _encode_share_url(url_compartida)
         resp = requests.get(
@@ -296,9 +326,11 @@ def listar_archivos_share(url_compartida: str) -> list[dict]:
             headers=_headers(), timeout=20,
         )
         resp.raise_for_status()
-        return resp.json().get("value", [])
-    except Exception:
-        return []
+        return resp.json().get("value", []), ""
+    except requests.HTTPError as e:
+        return [], _detalle_error_http(e)
+    except Exception as e:
+        return [], f"Error de conexión: {e}"
 
 
 def descargar_item(drive_id: str, item_id: str) -> bytes:
@@ -311,6 +343,56 @@ def descargar_item(drive_id: str, item_id: str) -> bytes:
     return resp.content
 
 
+def diagnostico_graph(url_compartida: str = "") -> list[dict]:
+    """Ejecuta cada paso de la integración por separado y devuelve un
+    detalle de cuál pasó y cuál falló, para ubicar la causa real en vez
+    de un genérico '401' o 'no se encontraron archivos'.
+
+    Pasos probados:
+      1) Obtener token (client credentials).
+      2) Acceder al drive de ONEDRIVE_USER (valida permiso Files.Read/ReadWrite
+         de tipo Aplicación + consentimiento admin).
+      3) Resolver el link compartido de la base de clientes (valida
+         Sites.Read.All / Files.Read.All de tipo Aplicación para recursos
+         fuera del propio drive del usuario, si el link es de otra persona).
+    """
+    pasos = []
+
+    # 1) Token
+    try:
+        _obtener_token()
+        pasos.append({"paso": "1. Obtener token (client credentials)", "ok": True, "detalle": ""})
+    except Exception as e:
+        pasos.append({"paso": "1. Obtener token (client credentials)", "ok": False,
+                       "detalle": f"Falló aquí mismo: revisa client_id/client_secret/tenant_id. {e}"})
+        return pasos  # sin token no tiene caso seguir
+
+    # 2) Drive del usuario
+    try:
+        resp = requests.get(f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive",
+                             headers=_headers(), timeout=10)
+        resp.raise_for_status()
+        pasos.append({"paso": f"2. Acceder al drive de {ONEDRIVE_USER}", "ok": True, "detalle": ""})
+    except requests.HTTPError as e:
+        pasos.append({"paso": f"2. Acceder al drive de {ONEDRIVE_USER}", "ok": False,
+                       "detalle": _detalle_error_http(e)})
+    except Exception as e:
+        pasos.append({"paso": f"2. Acceder al drive de {ONEDRIVE_USER}", "ok": False,
+                       "detalle": f"Error de conexión: {e}"})
+
+    # 3) Link compartido (solo si se pasó uno)
+    if url_compartida:
+        items, error = listar_archivos_share(url_compartida)
+        if error:
+            pasos.append({"paso": "3. Resolver carpeta compartida (base de clientes)",
+                           "ok": False, "detalle": error})
+        else:
+            pasos.append({"paso": "3. Resolver carpeta compartida (base de clientes)",
+                           "ok": True, "detalle": f"{len(items)} elemento(s) encontrados."})
+
+    return pasos
+
+
 def descargar_excel_base(url_compartida: str):
     """Busca el primer archivo Excel dentro de la carpeta compartida y lo
     descarga. Retorna (contenido_bytes, nombre_archivo, fecha_modificado) o
@@ -318,9 +400,11 @@ def descargar_excel_base(url_compartida: str):
     if not credenciales_configuradas():
         return None, "Credenciales de Graph API no configuradas.", None
     try:
-        items = listar_archivos_share(url_compartida)
+        items, error = listar_archivos_share(url_compartida)
+        if error:
+            return None, error, None
         if not items:
-            return None, "No se encontraron archivos en la carpeta compartida.", None
+            return None, "La carpeta compartida existe pero no tiene archivos.", None
         for it in items:
             nombre = it.get("name", "")
             if it.get("folder") or not nombre.lower().endswith((".xlsx", ".xls")):
