@@ -81,7 +81,31 @@ def _obtener_token() -> str:
     _token_cache["expires_at"] = ahora + data.get("expires_in", 3600)
     return _token_cache["access_token"]
 
-def probar_token():
+def diagnosticar_token() -> dict:
+    """Decodifica (sin validar firma) el access token que se está usando y
+    devuelve sus claims clave. Sirve para confirmar si el permiso
+    'Files.ReadWrite.AppFolder' (Aplicación) realmente llegó al token —
+    si 'roles' sale vacío o no incluye ese permiso, el problema está en
+    Azure (falta 'Grant admin consent', quedó como Delegado, o es la app
+    equivocada), no en este código."""
+    import base64
+    import json
+    try:
+        token = _obtener_token()
+        partes = token.split(".")
+        if len(partes) < 2:
+            return {"error": "Token con formato inesperado."}
+        payload = partes[1]
+        payload += "=" * (-len(payload) % 4)  # padding para base64
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+        return {
+            "app_id (debe ser tu client_id)": claims.get("appid", ""),
+            "tenant_id": claims.get("tid", ""),
+            "roles (permisos de Aplicación concedidos)": claims.get("roles", []),
+            "audiencia": claims.get("aud", ""),
+        }
+    except Exception as e:
+        return {"error": f"No se pudo decodificar el token: {e}"}
     url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
 
     resp = requests.post(
