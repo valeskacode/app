@@ -1,37 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 utils/onedrive.py
-Integración con Microsoft Graph API para subir reportes (Word/PDF),
-el historial Excel y las fotos de visita directamente a OneDrive,
-sin necesitar el cliente de escritorio instalado en el servidor.
-
-Usa el flujo "Client Credentials" (app-only, sin login interactivo de
-usuario). Esto requiere que en Azure AD → App registrations →
-appvisitareporte → "Permisos de API" el permiso Files.ReadWrite.All
-esté agregado como permiso de tipo **Aplicación** (no Delegado), y que
-un administrador global haya presionado "Otorgar consentimiento
-administrativo". Si el permiso quedó como Delegado, esta integración
-fallará con error 401/403 sin importar que las credenciales sean
-correctas, porque el flujo Client Credentials no tiene un usuario
-autenticado detrás.
-
-Requiere las credenciales de la app registrada en Azure AD:
-  - CLIENT_ID     (ID de la aplicación)
-  - CLIENT_SECRET (secreto de cliente — el VALOR, no el ID del secreto)
-  - TENANT_ID     (ID del directorio / inquilino)
-
-Estas credenciales se configuran en Streamlit Cloud → Settings →
-Secrets (nunca en el código ni en el repositorio), con esta forma:
-
-    [graph]
-    client_id = "f4f4f84d-93c0-4450-97f6-8fdf25f14de1"
-    client_secret = "el-valor-real-del-secreto"
-    tenant_id = "f3831aea-ec1b-461b-b42f-ca26f9f78551"
-    onedrive_user = "auditoria@cajaarequipa.pe"
-    onedrive_carpeta = "Auditoria/VisitaClientes"
-
-También se aceptan variables de entorno (GRAPH_CLIENT_ID, etc.) como
-alternativa, útil para pruebas locales.
 """
 import io
 import os
@@ -62,38 +31,25 @@ def _secret(key: str, default: str = "") -> str:
     return os.environ.get(f"GRAPH_{key.upper()}", default)
 
 
-# --------------------------------------------------------------------------
-# CONFIGURACIÓN — lee desde Streamlit Secrets (o variables de entorno)
-# --------------------------------------------------------------------------
+# CONFIGURACIÓN — lee desde Streamlit Secrets
 CLIENT_ID     = _secret("client_id")
 CLIENT_SECRET = _secret("client_secret")
 TENANT_ID     = _secret("tenant_id")
 
-# Correo / UPN del usuario de OneDrive donde se guardarán los archivos.
-# Ej: "auditoria@cajaarequipa.pe"
 ONEDRIVE_USER = _secret("onedrive_user")
 
-# Ruta de la carpeta DENTRO de ese OneDrive donde caerán los reportes.
-# Ej: "Auditoria/VisitaClientes"
-# Deja vacío ("") para que quede en la raíz del OneDrive.
-ONEDRIVE_CARPETA = _secret("onedrive_carpeta", "Auditoria/VisitaClientes")
+ONEDRIVE_CARPETA = _secret("onedrive_carpeta", "Mis archivos/visita_prueba")
 
-# Link de "Compartir" de la carpeta de OneDrive/SharePoint donde está el
-# Excel con la cartera de clientes (el mismo que se sube manualmente en
-# "Búsqueda"). Configúralo en Secrets como base_share_url si cambia.
 ONEDRIVE_BASE_SHARE_URL = _secret(
     "base_share_url",
-    "https://cajaarequipape-my.sharepoint.com/:f:/g/personal/vherrera_cajaarequipa_pe/"
-    "IgDFL8eh0Jv9TY56xnomN8DgASKbGXNZRG1OF15eSzXgVj0?e=WSdtmm",
+    """https://cajaarequipape-my.sharepoint.com/:f:/g/personal/vherrera_cajaarequipa_pe/"
+    "IgDFL8eh0Jv9TY56xnomN8DgASKbGXNZRG1OF15eSzXgVj0?e=WSdtmm"""
 )
 
 # URL base de Graph API
 GRAPH_URL = "https://graph.microsoft.com/v1.0"
 
-# --------------------------------------------------------------------------
-# TOKEN — Client Credentials Flow (app-only, sin login interactivo).
-# Necesita permiso "Files.ReadWrite.All" en la app de Azure.
-# --------------------------------------------------------------------------
+# TOKEN —
 _token_cache: dict = {}
 
 
@@ -127,10 +83,7 @@ def credenciales_configuradas() -> bool:
     """True si las tres credenciales mínimas están presentes."""
     return bool(CLIENT_ID and CLIENT_SECRET and TENANT_ID and ONEDRIVE_USER)
 
-
-# --------------------------------------------------------------------------
 # OPERACIONES CON ONEDRIVE
-# --------------------------------------------------------------------------
 
 def _ruta_onedrive(nombre_archivo: str, subcarpeta: str = "") -> str:
     """Construye la ruta completa dentro del OneDrive del usuario."""
@@ -233,9 +186,17 @@ def test_conexion() -> tuple[bool, str]:
         _obtener_token()
         url  = f"{GRAPH_URL}/users/{ONEDRIVE_USER}/drive"
         resp = requests.get(url, headers=_headers(), timeout=10)
-        resp.raise_for_status()
-        nombre = resp.json().get("owner", {}).get("user", {}).get("displayName", ONEDRIVE_USER)
-        return True, f"Conectado correctamente al OneDrive de: {nombre}"
+        """resp.raise_for_status()
+        nombre = resp.json().get("owner", {}).get("user", {}).get("displayName", ONEDRIVE_USER)"""
+        return False, (
+        f"URL: {url}\n\n"
+        f"STATUS: {resp.status_code}\n\n"
+        f"BODY: {resp.text}"
+        )
+        
+        return False, f"Diagnóstico: HTTP {resp.status_code}"
+
+       # return True, f"Conectado correctamente al OneDrive de: {nombre}"
     except requests.HTTPError as e:
         codigo = e.response.status_code if e.response else "?"
         if codigo == 401:
@@ -251,10 +212,7 @@ def test_conexion() -> tuple[bool, str]:
     except Exception as e:
         return False, f"Error de conexión: {e}"
 
-
-# --------------------------------------------------------------------------
 # CARPETA — link directo para abrir en el navegador / app de OneDrive
-# --------------------------------------------------------------------------
 
 def carpeta_weburl(subcarpeta: str = "") -> str:
     """Devuelve el webUrl (link para abrir en el navegador) de la carpeta
@@ -273,11 +231,7 @@ def carpeta_weburl(subcarpeta: str = "") -> str:
     except Exception:
         return ""
 
-
-# --------------------------------------------------------------------------
-# BASE DE CLIENTES — descargar el Excel directamente desde un link
-# de OneDrive/SharePoint compartido (sin subirlo manualmente desde el móvil)
-# --------------------------------------------------------------------------
+# BASE DE CLIENTES 
 
 def _encode_share_url(url: str) -> str:
     """Codifica una URL para usarla con el endpoint /shares/ de Graph API."""
