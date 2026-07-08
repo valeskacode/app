@@ -228,10 +228,29 @@ def pantalla_busqueda():
             from utils.onedrive import (
                 credenciales_configuradas as _od_ok,
                 descargar_excel_base, ONEDRIVE_BASE_SHARE_URL,
-                diagnostico_graph,
+                diagnostico_graph, diagnosticar_token,
             )
             if _od_ok():
                 with st.expander("🔧 Diagnóstico de conexión OneDrive/Graph"):
+                    if st.button("Ver permisos reales en el token", key="btn_diag_token"):
+                        with st.spinner("Decodificando token..."):
+                            claims = diagnosticar_token()
+                        st.json(claims)
+                        roles = claims.get("roles (permisos de Aplicación concedidos)")
+                        if roles is not None and not roles:
+                            st.warning(
+                                "El token no trae NINGÚN permiso de Aplicación ('roles' está "
+                                "vacío). Esto significa que en Azure el permiso todavía no "
+                                "tiene el consentimiento de administrador aplicado (botón "
+                                "'Grant admin consent'), o quedó agregado como Delegado en "
+                                "vez de Aplicación."
+                            )
+                        elif roles and "Files.ReadWrite.AppFolder" not in roles:
+                            st.warning(
+                                f"El token trae estos permisos: {roles} — pero NO incluye "
+                                "'Files.ReadWrite.AppFolder'. Revisa en Azure que ese permiso "
+                                "específico tenga el consentimiento de administrador otorgado."
+                            )
                     if st.button("Ejecutar diagnóstico", key="btn_diag_graph"):
                         with st.spinner("Probando conexión con Microsoft Graph..."):
                             pasos = diagnostico_graph(ONEDRIVE_BASE_SHARE_URL)
